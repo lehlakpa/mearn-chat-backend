@@ -6,12 +6,15 @@ import express from "express";
 dotenv.config();
 import connectDB from "./config/database.js";
 
+import authRoutes from "./routes/auth.routes.js";
 
 import { Server } from "socket.io";
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {
     res.send("server is running");
