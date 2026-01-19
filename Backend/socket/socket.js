@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 dotenv.config();
-import {Socket, Server as SocketIOServer } from "socket.io";
+import { Socket, Server as SocketIOServer } from "socket.io";
 import jwt from "jsonwebtoken";
-import { registerUserEvents } from "./userEvents";
+import { registerUserEvents } from "./userEvents.js";
 
 
-export function initializeSocket(server) {  
+export function initializeSocket(server) {
     const io = new SocketIOServer(server, {
         cors: {
             origin: process.env.CLIENT_URL,
@@ -17,7 +17,7 @@ export function initializeSocket(server) {
         if (!token) {
             return next(new Error("Authentication error"));
         }
-        
+
         jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
             if (err) {
                 return next(new Error("Authentication error"));
@@ -31,11 +31,11 @@ export function initializeSocket(server) {
         });
     });
     io.on("connection", async (socket) => {
-        const userId=socket.data.userId;
+        const userId = socket.data.userId;
         console.log(`User Connected ${userId}, username ${socket.data.user.name}`);
 
 
-// registering events 
+        // registering events 
         registerUserEvents(io, socket);
 
 
