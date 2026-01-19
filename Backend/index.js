@@ -9,6 +9,7 @@ import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.routes.js";
 
 import { Server } from "socket.io";
+import { initializeSocket } from "./socket/socket.js";
 const app = express();
 
 app.use(cors());
@@ -22,6 +23,10 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000
 const server = http.createServer(app);
+
+
+///  listen to socket server instance 
+initializeSocket(server);
 
 connectDB().then(() => {
     console.log("database connected successfully");
