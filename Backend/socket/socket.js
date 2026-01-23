@@ -3,6 +3,8 @@ dotenv.config();
 import { Socket, Server as SocketIOServer } from "socket.io";
 import jwt from "jsonwebtoken";
 import { registerUserEvents } from "./userEvents.js";
+import { registerChatEvents } from "./chatEvents.js";
+import Conversation from "../models/Conversation.js";
 
 
 export function initializeSocket(server) {
@@ -35,10 +37,22 @@ export function initializeSocket(server) {
         console.log(`User Connected ${userId}, username ${socket.data.user.name}`);
 
 
-        // registering events 
+        // registering events
         registerUserEvents(io, socket);
+        registerChatEvents(io, socket);
 
+        try {
+            const conversations = await Conversation.find({
+                participants: userId
+            }).select("_id");
+            conversations.forEach(conversation => {
+                socket.join(conversation._id.toString());
+            });
 
+        } catch (error) {
+
+            console.log("error joining conversation", error)
+        }
 
         socket.on("disconnect", () => {
             //user logs out
