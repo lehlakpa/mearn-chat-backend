@@ -33,11 +33,7 @@ const conversationSchema = new mongoose.Schema(
         timestamps: true,
     }
 );
-conversationSchema.pre("save", async function (next) {
-    this.updatedAt = new Date();
-    next();
-}
-)
+
 
 const Conversation = mongoose.model("Conversation", conversationSchema);
 

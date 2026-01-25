@@ -61,7 +61,7 @@ export function registerUserEvents(io, socket) {
             });
         }
     });
-    socket.on("getCOntacts", async () => {
+    socket.on("getContacts", async () => {
         try {
             const currentUserId = socket.data.userId;
             if (!currentUserId) {

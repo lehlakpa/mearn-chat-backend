@@ -1,11 +1,11 @@
-import { id } from "schema/lib/objecttools.js";
 import Conversation from "../models/Conversation.js";
+import Message from "../models/Message.js";
 
 
 export function registerChatEvents(io, socket) {
 
 
-    socket.io("getCOnversation", async () => {
+    socket.on("getConversation", async () => {
         console.log("getConversation");
         try {
             const userId = socket.data.userId;
@@ -23,8 +23,8 @@ export function registerChatEvents(io, socket) {
             })
                 .sort({ updatedAt: -1 })
                 .populate({
-                    path: "last message",
-                    select: "content senderID attachement createdAt"
+                    path: "lastMessage",
+                    select: "content senderId attachment createdAt"
                 }).populate({
                     path: "participants",
                     select: "name email avatar"
@@ -114,7 +114,7 @@ export function registerChatEvents(io, socket) {
         try {
             const message = await Message.create({
                 conversationId: data.conversationId,
-                senderId: socket.data.sender._id,
+                senderId: socket.data.userId,
                 content: data.content,
                 attachment: data.attachment
 
@@ -126,9 +126,9 @@ export function registerChatEvents(io, socket) {
                     content: message.content,
                     attachment: message.attachment,
                     sender: {
-                        id: data.sender._id,
-                        name: data.sender.name,
-                        avatar: data.sender.avatar
+                        id: socket.data.user.id,
+                        name: socket.data.user.name,
+                        avatar: socket.data.user.avatar
 
                     },
                     attachment: message.attachment,
@@ -151,46 +151,45 @@ export function registerChatEvents(io, socket) {
         }
     }
     )
+    
+    socket.on("getMessages", async (data) => {
+        console.log("getMessages", data);
 
-}
-socket.on("getMessages", async (data:{conversationId:string}) => {
-    console.log("getMessages", data);
-    try {
-     const messages=await Message.find({
-        conversationId:data.conversationId
-     })
-     .sort({createdAt:-1})
-     .populate<{senderId:string,name:string,avatar:string}>({
-        path:"senderId",
-        select:"name avatar"
-     }).lean();
-     const messageWithSender=messages.map(message=>{
-        return{
-            ...messages,
-            id:message._id,
-            sender:{
-                id:message.senderId._id,
-                name:message.senderId.name,
-                avatar:message.senderId.avatar
-            },
-            createdAt:message.createdAt
+        try {
+            const messages = await Message.find({
+                conversationId: data.conversationId,
+            })
+                .sort({ createdAt: -1 })
+                .populate({
+                    path: "senderId",
+                    select: "name avatar",
+                })
+                .lean();
+
+            const messageWithSender = messages.map((message) => ({
+                ...message,
+                id: message._id,
+                sender: message.senderId
+                    ? {
+                        id: message.senderId._id,
+                        name: message.senderId.name,
+                        avatar: message.senderId.avatar,
+                    }
+                    : null,
+                createdAt: message.createdAt,
+            }));
+
+            socket.emit("getMessages", {
+                success: true,
+                data: messageWithSender,
+            });
+        } catch (error) {
+            console.error("getMessages error", error);
+
+            socket.emit("getMessages", {
+                success: false,
+                msg: error?.message || "Failed to get messages",
+            });
         }
-     })
-     socket.emit("getMessages",{
-        success:true,
-        data:messageWithSender
-     })
-
-    } catch (error) {
-        console.log("getMessages error", error);
-        socket.emit("getMessages", {
-            success: false,
-            msg: error.message || "Failed to send message"
-        })
-
-    }
+    });
 }
-)
-
-
-
