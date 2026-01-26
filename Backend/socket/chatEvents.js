@@ -52,10 +52,22 @@ export function registerChatEvents(io, socket) {
         console.log("newConversation", data);
 
         try {
+            const creatorId = socket.data.userId;
+            // Ensure the creator is part of the participants list and remove duplicates
+            const participants = [...new Set([...(data.participants || []).filter(Boolean), creatorId])];
+
             if (data.type == "direct") {
+                if (participants.length !== 2) {
+                    // This can happen if the client sends a bad ID, or a user tries to DM themselves.
+                    return socket.emit("newConversation", {
+                        success: false,
+                        msg: "Direct conversations must have exactly two unique participants."
+                    });
+                }
+                // Check if a direct conversation between these two users already exists
                 const conversation = await Conversation.findOne({
                     type: "direct",
-                    participants: { $all: data.participants, $size: 2 }
+                    participants: { $all: participants, $size: 2 }
                 }).populate({
                     path: "participants",
                     select: "name email avatar"
@@ -64,28 +76,27 @@ export function registerChatEvents(io, socket) {
                     socket.emit("newConversation", {
                         success: true,
                         data: { ...conversation, isNew: false }
-                    })
+                    });
                     return;
-
                 }
             }
             const conversation = await Conversation.create({
                 type: data.type,
-                participants: data.participants,
+                participants: participants,
                 avatar: data.avatar || "",
                 name: data.name || "",
-                createdBy: socket.data.userId
+                createdBy: creatorId
             })
 
             const connectedSockets = Array.from(io.sockets.sockets.values()).filter(s => {
-                return data.participants.includes(s.data.userId);
+                return participants.includes(s.data.userId);
             });
 
             //join this conversation by all online participants
             connectedSockets.forEach(participantSocket => {
                 participantSocket.join(conversation._id.toString());
             });
-
+ 
             //send the conversation data back populated
             const populatedConversation = await Conversation.findById(conversation._id).populate({
                 path: "participants",
@@ -151,7 +162,7 @@ export function registerChatEvents(io, socket) {
         }
     }
     )
-    
+
     socket.on("getMessages", async (data) => {
         console.log("getMessages", data);
 
