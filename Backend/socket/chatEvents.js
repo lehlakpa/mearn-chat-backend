@@ -3,8 +3,6 @@ import Message from "../models/Message.js";
 
 
 export function registerChatEvents(io, socket) {
-
-
     socket.on("getConversation", async () => {
         console.log("getConversation");
         try {
@@ -142,7 +140,6 @@ export function registerChatEvents(io, socket) {
                         avatar: socket.data.user.avatar
 
                     },
-                    attachment: message.attachment,
                     createdAt: message.createdAt,
                     conversationId: message.conversationId,
                 }
