@@ -1,5 +1,5 @@
 import Conversation from "../models/Conversation.js";
-import Message from "../models/Message.js";
+import Message from "../models/message.js";
 
 
 export function registerChatEvents(io, socket) {

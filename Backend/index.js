@@ -8,7 +8,6 @@ import connectDB from "./config/database.js";
 
 import authRoutes from "./routes/auth.routes.js";
 
-import { Server } from "socket.io";
 import { initializeSocket } from "./socket/socket.js";
 const app = express();
 

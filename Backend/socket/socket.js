@@ -6,9 +6,9 @@ import { registerUserEvents } from "./userEvents.js";
 import { registerChatEvents } from "./chatEvents.js";
 import Conversation from "../models/Conversation.js";
 
-
+export let io;
 export function initializeSocket(server) {
-    const io = new SocketIOServer(server, {
+    io = new SocketIOServer(server, {
         cors: {
             origin: process.env.CLIENT_URL,
             methods: ["GET", "POST"],
@@ -34,6 +34,7 @@ export function initializeSocket(server) {
     });
     io.on("connection", async (socket) => {
         const userId = socket.data.userId;
+        socket.join(userId.toString());
         console.log(`User Connected ${userId}, username ${socket.data.user.name}`);
 
 
