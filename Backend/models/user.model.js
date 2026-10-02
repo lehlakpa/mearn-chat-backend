@@ -1,36 +1,43 @@
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    {
+        name: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
+        username: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true,
+        },
 
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-      select: false, // hides password from queries by default
-    },
+        password: {
+            type: String,
+            required: true,
+            minlength: 6,
+            select: false,
+        },
 
-    avatar: {
-      type: String, // image URL or file path
-      default: "",
+        phoneNumber: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        refreshToken: {
+            type: String,
+            default: null,
+            select: false,
+        },
     },
-  },
-  {
-    timestamps: true, // adds createdAt & updatedAt automatically
-  }
+    {
+        timestamps: true,
+    }
 );
 
 const User = mongoose.model("User", userSchema);

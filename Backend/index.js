@@ -1,5 +1,3 @@
-
-import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -7,32 +5,37 @@ dotenv.config();
 import connectDB from "./config/database.js";
 
 import authRoutes from "./routes/auth.routes.js";
+import productRoutes from "./routes/product.routes.js";
 
-import { initializeSocket } from "./socket/socket.js";
 const app = express();
 
-app.use(cors());
+app.use(
+    cors({
+        origin: "*", // Render deploy ko lagi sabai origin allow
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+    })
+);
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use("/auth", authRoutes);
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
 
 app.get("/", (req, res) => {
-    res.send("server is running");
-})
+    res.json({ success: true, message: "Server is running 🚀" });
+});
 
-const PORT = process.env.PORT || 3000
-const server = http.createServer(app);
+const PORT = process.env.PORT || 3000;
 
-
-///  listen to socket server instance 
-initializeSocket(server);
-
-connectDB().then(() => {
-    console.log("database connected successfully");
-    server.listen(PORT, () => {
-        console.log(`server is running on port ${PORT}`);
+connectDB()
+    .then(() => {
+        console.log("✅ Database connected successfully");
+        app.listen(PORT, () => {
+            console.log(`🚀 Server is running on port ${PORT}`);
+        });
+    })
+    .catch((error) => {
+        console.log("❌ Failed to connect to database:", error);
     });
-
-}).catch((error)=>{
-   console.log("failed to load data due to database connnection:",error) ;
-})

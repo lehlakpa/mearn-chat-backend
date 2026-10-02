@@ -1,49 +1,58 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcrypt";
-import { generateToken } from "../utils/token.js";
-import { io } from "../socket/socket.js";
-import Product from "../models/Products.js";
+import {
+    generateAccessToken,
+    generateRefreshToken,
+    verifyRefreshToken,
+} from "../utils/token.js";
 
-
+// ─────────────────────────────────────────
+// @route   POST /api/auth/register
+// @desc    Register new user
+// @access  Public
+// ─────────────────────────────────────────
 export const registerUser = async (req, res) => {
-    const { name, email, password, avatar } = req.body;
+    const { name, username, password, phoneNumber } = req.body;
+
+    if (!name || !username || !password || !phoneNumber) {
+        return res.status(400).json({
+            success: false,
+            message: "Name, username, password and phone number are required",
+        });
+    }
 
     try {
-        // Check if user already exists
-        let user = await User.findOne({ email });
-        if (user) {
-            return res
-                .status(400)
-                .json({ success: false, message: "User already exists" });
+        // Check if username already exists
+        const existingUser = await User.findOne({ username: username.toLowerCase() });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: "Username already taken",
+            });
         }
-
-        // Create new user
-        user = new User({
-            name,
-            email,
-            password,
-            avatar: avatar || "",
-        });
 
         // Hash password
         const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Save user
+        // Create user
+        const user = new User({
+            name,
+            username: username.toLowerCase(),
+            password: hashedPassword,
+            phoneNumber,
+        });
+
         await user.save();
-
-        // Generate JWT
-        const token = generateToken(user);
 
         res.status(201).json({
             success: true,
             message: "User registered successfully",
-            token,
             user: {
                 id: user._id,
                 name: user.name,
-                email: user.email,
-                avatar: user.avatar,
+                username: user.username,
+                phoneNumber: user.phoneNumber,
                 createdAt: user.createdAt,
             },
         });
@@ -55,39 +64,59 @@ export const registerUser = async (req, res) => {
         });
     }
 };
+
+// ─────────────────────────────────────────
+// @route   POST /api/auth/login
+// @desc    Login user, returns accessToken + refreshToken
+// @access  Public
+// ─────────────────────────────────────────
 export const loginUser = async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ success: false, message: "Email and password are required" });
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({
+            success: false,
+            message: "Username and password are required",
+        });
     }
 
     try {
-        const user = await User.findOne({ email }).select("+password");
+        const user = await User.findOne({ username: username.toLowerCase() }).select("+password +refreshToken");
         if (!user) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Invalid credentials" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid credentials",
+            });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ success: false, message: "Invalid credentials" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid credentials",
+            });
         }
-        const token = generateToken(user);
+
+        // Generate tokens
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+
+        // Save refreshToken in DB
+        user.refreshToken = refreshToken;
+        await user.save();
 
         res.json({
             success: true,
-            message: "User logged in successfully",
-            token,
+            message: "Logged in successfully",
+            accessToken,
+            refreshToken,
             user: {
                 id: user._id,
                 name: user.name,
-                email: user.email,
-                avatar: user.avatar,
-                createdAt: user.createdAt,
-            }
-        })
-
+                username: user.username,
+                phoneNumber: user.phoneNumber,
+            },
+        });
     } catch (error) {
         console.error("Login error:", error);
         res.status(500).json({
@@ -97,51 +126,65 @@ export const loginUser = async (req, res) => {
     }
 };
 
-export const UploadProduct = async (req, res) => {
-    const { title , description, price } = req.body;
-    const image = req.cloudinary ? req.cloudinary.url : null;
+// ─────────────────────────────────────────
+// @route   POST /api/auth/refresh-token
+// @desc    Get new accessToken using refreshToken
+// @access  Public
+// ─────────────────────────────────────────
+export const refreshAccessToken = async (req, res) => {
+    const { refreshToken } = req.body;
 
-    // Add validation for required fields
-    if (!title || !description || !price) {
-        console.log("Validation Error: Missing fields", { title, description, price });
-        return res.status(400).json({ success: false, message: "Title, description, and price are required." });
-    }
-
-
-    if (!image) {
-        return res.status(400).json({ success: false, message: "Product image is required." });
+    if (!refreshToken) {
+        return res.status(400).json({
+            success: false,
+            message: "Refresh token is required",
+        });
     }
 
     try {
-        console.log("Received product data:", { title, description, price, image });
-        const product = new Product({
-            title,
-            description,
-            price,
-            image,
-        });
-        await product.save();
-        res.status(201).json({
+        const decoded = verifyRefreshToken(refreshToken);
+
+        const user = await User.findById(decoded.id).select("+refreshToken");
+        if (!user || user.refreshToken !== refreshToken) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid refresh token",
+            });
+        }
+
+        const newAccessToken = generateAccessToken(user);
+
+        res.json({
             success: true,
-            message: "Product uploaded successfully",
-            product,
+            message: "Access token refreshed",
+            accessToken: newAccessToken,
         });
     } catch (error) {
-        console.error("Upload error:", error);
+        console.error("Refresh token error:", error);
+        res.status(401).json({
+            success: false,
+            message: "Refresh token expired or invalid. Please login again.",
+        });
+    }
+};
+
+// ─────────────────────────────────────────
+// @route   POST /api/auth/logout
+// @desc    Logout user (clear refreshToken from DB)
+// @access  Private
+// ─────────────────────────────────────────
+export const logoutUser = async (req, res) => {
+    try {
+        await User.findByIdAndUpdate(req.user.id, { refreshToken: null });
+        res.json({
+            success: true,
+            message: "Logged out successfully",
+        });
+    } catch (error) {
+        console.error("Logout error:", error);
         res.status(500).json({
             success: false,
             message: "Internal server error",
         });
     }
-}
-
-
-
-export const sendNotification = async (req, res) => {
-    const { userId } = req.params;
-    io.to(userId).emit("notification", {
-        type: "newMessage",
-        message: "You have a new message"
-    });
-    res.send("Notification sent successfully")
-}
+};

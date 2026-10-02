@@ -1,26 +1,24 @@
-import { Router } from "express";
-import { loginUser, registerUser, UploadProduct, sendNotification } from "../controllers/authcontrollers.js";
-import upload from "../middleware/multer_middleware.js";
-import uploadToCloudinary from "../middleware/cloudinary_middleware.js";
+import express from "express";
+import {
+    registerUser,
+    loginUser,
+    refreshAccessToken,
+    logoutUser,
+} from "../controllers/authcontrollers.js";
+import authMiddleware from "../middleware/auth.middleware.js";
 
-const router = Router();
+const router = express.Router();
 
+// POST /api/auth/register
 router.post("/register", registerUser);
-router.post("/login", loginUser);
-router.get("/sendNotification", sendNotification);
 
-router.post("/uploadProduct",
-    (req, res, next) => {
-        upload.single("image")(req, res, (err) => {
-            if (err) {
-                console.log("Multer Error:", err.message);
-                return res.status(400).json({ success: false, message: err.message });
-            }
-            next();
-        });
-    },
-    uploadToCloudinary,
-    UploadProduct
-);
+// POST /api/auth/login
+router.post("/login", loginUser);
+
+// POST /api/auth/refresh-token
+router.post("/refresh-token", refreshAccessToken);
+
+// POST /api/auth/logout  (protected)
+router.post("/logout", authMiddleware, logoutUser);
 
 export default router;
