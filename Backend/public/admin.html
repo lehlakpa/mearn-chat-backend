@@ -7,13 +7,13 @@
 <p id="message" role="status" aria-live="polite"></p>
 <section id="auth" class="auth" hidden>
 <p class="eyebrow">ADMIN PORTAL</p><h1 id="auth-title">Welcome back.</h1><p>Manage your products and inventory.</p>
-<div class="tabs"><button id="login-tab" class="secondary" type="button">Login</button><button id="register-tab" class="secondary" type="button">Register admin</button></div>
+<div class="tabs"><button id="login-tab" class="secondary" type="button">Login</button><button id="register-tab" class="secondary" type="button">Create account</button></div>
 <form id="auth-form">
 <label class="registration" hidden>Full name<input name="name" autocomplete="name"></label>
 <label>Username<input name="username" autocomplete="username" required></label>
 <label>Password<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
 <label class="registration" hidden>Phone number<input name="phoneNumber" type="tel" autocomplete="tel"></label>
-<label class="registration" hidden>Admin registration key<input name="adminKey" type="password" autocomplete="off"><small>Use the private key provided by the store owner.</small></label>
+<p>New accounts need the store owner's approval before accessing the admin dashboard.</p>
 <button id="auth-submit" type="submit">Login to dashboard</button>
 </form></section>
 <section id="dashboard" hidden>

@@ -1,6 +1,5 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcrypt";
-import { timingSafeEqual } from "node:crypto";
 import {
     generateAccessToken,
     generateRefreshToken,
@@ -13,26 +12,12 @@ import {
 // @access  Public
 // ─────────────────────────────────────────
 export const registerUser = async (req, res) => {
-    const { name, username, password, phoneNumber } = req.body;
-
-    const expectedKey = process.env.ADMIN_REGISTRATION_KEY;
-    const suppliedKey = req.body.adminKey;
-    if (!expectedKey) {
-        return res.status(503).json({ success: false, message: "Admin registration is disabled. Configure ADMIN_REGISTRATION_KEY on the server." });
-    }
-    if (typeof suppliedKey !== "string" || Buffer.byteLength(suppliedKey) !== Buffer.byteLength(expectedKey) ||
-        !timingSafeEqual(Buffer.from(suppliedKey), Buffer.from(expectedKey))) {
-        return res.status(403).json({ success: false, message: "A valid admin registration key is required" });
-    }
+    const { name, username, password, phoneNumber } = req.body ?? {};
     if (![name, username, password, phoneNumber].every(value => typeof value === "string" && value.trim()) || password.length < 6 || Buffer.byteLength(password) > 72) {
         return res.status(400).json({ success: false, message: "All fields are required; password must be at least 6 characters and at most 72 bytes" });
     }
-
-    if (!name || !username || !password || !phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: "Name, username, password and phone number are required",
-        });
+    if (name.length > 100 || username.length > 100 || phoneNumber.length > 25) {
+        return res.status(400).json({ success: false, message: "Name and username must not exceed 100 characters; phone number must not exceed 25 characters" });
     }
 
     try {
@@ -52,17 +37,18 @@ export const registerUser = async (req, res) => {
         // Create user
         const user = new User({
             name,
-            username: username.toLowerCase(),
+            username: username.trim().toLowerCase(),
             password: hashedPassword,
             phoneNumber,
-            role: "admin",
+            // Public signup must never grant admin privileges, including via adminKey or role.
+            role: "customer",
         });
 
         await user.save();
 
         res.status(201).json({
             success: true,
-            message: "Admin registered successfully",
+            message: "Account created. The store owner must approve admin access before you can log in to the dashboard.",
             user: {
                 id: user._id,
                 name: user.name,
@@ -86,9 +72,9 @@ export const registerUser = async (req, res) => {
 // @access  Public
 // ─────────────────────────────────────────
 export const loginUser = async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password } = req.body ?? {};
 
-    if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password) {
+    if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password || username.length > 100 || Buffer.byteLength(password) > 72) {
         return res.status(400).json({
             success: false,
             message: "Username and password are required",
@@ -113,7 +99,7 @@ export const loginUser = async (req, res) => {
         }
 
         if (user.role !== "admin") {
-            return res.status(403).json({ success: false, message: "Login is available to admins only" });
+            return res.status(403).json({ success: false, message: "Admin access has not been approved. Contact the store owner." });
         }
 
         // Generate tokens
@@ -151,9 +137,9 @@ export const loginUser = async (req, res) => {
 // @access  Public
 // ─────────────────────────────────────────
 export const refreshAccessToken = async (req, res) => {
-    const { refreshToken } = req.body;
+    const { refreshToken } = req.body ?? {};
 
-    if (!refreshToken) {
+    if (typeof refreshToken !== "string" || !refreshToken || refreshToken.length > 4096) {
         return res.status(400).json({
             success: false,
             message: "Refresh token is required",

@@ -2,6 +2,9 @@ import "dotenv/config";
 import app from "./app.js";
 import connectDB from "./config/database.js";
 import Order from "./models/Order.js";
+import { validateSecrets } from "./config/security.js";
+
+validateSecrets();
 
 const PORT = process.env.PORT || 3000;
 connectDB().then(async () => {

@@ -57,20 +57,51 @@ test("anonymous users and customers cannot manage inventory or view low stock", 
     assert.equal((await request("/api/products", "POST", {}, token)).status, 403);
     assert.equal((await request("/api/admin/me", "GET", null, token)).status, 403);
 });
-test("admin registration rejects missing or incorrect private keys", async () => {
-    assert.equal((await request("/api/auth/register", "POST", { role: "admin" })).status, 403);
-    assert.equal((await request("/api/auth/register", "POST", { adminKey: "wrong" })).status, 403);
+test("registration validates required fields without a key", async () => {
+    assert.equal((await request("/api/auth/register", "POST", { role: "admin" })).status, 400);
+    assert.equal((await request("/api/auth/register", "POST", { adminKey: "wrong" })).status, 400);
 });
-test("authorized registration creates an admin with a hashed password", async () => {
+test("public registration ignores client admin privileges and hashes the password", async () => {
     mock.method(User, "findOne", async () => null);
     let saved;
     mock.method(User.prototype, "save", async function () { saved = this; return this; });
-    const response = await request("/api/auth/register", "POST", { name: "Owner", username: "Owner", phoneNumber: "9800000000", password: "strong-secret", adminKey: process.env.ADMIN_REGISTRATION_KEY, role: "customer" });
+    const response = await request("/api/auth/register", "POST", { name: "Owner", username: "Owner", phoneNumber: "9800000000", password: "strong-secret", adminKey: process.env.ADMIN_REGISTRATION_KEY, role: "admin" });
     assert.equal(response.status, 201);
-    assert.equal(saved.role, "admin");
+    assert.equal(saved.role, "customer");
     assert.ok(await bcrypt.compare("strong-secret", saved.password));
     assert.equal((await response.json()).user.password, undefined);
 });
+test("registration works without a supplied key or server key", async () => {
+    const legacyKey = process.env.ADMIN_REGISTRATION_KEY;
+    delete process.env.ADMIN_REGISTRATION_KEY;
+    mock.method(User, "findOne", async () => null);
+    mock.method(User.prototype, "save", async function () {
+        assert.equal(this.role, "customer");
+        assert.equal(this.username, "owner");
+        return this;
+    });
+    try {
+        const response = await request("/api/auth/register", "POST", { name: "Owner", username: " Owner ", phoneNumber: "9800000000", password: "strong-secret" });
+        assert.equal(response.status, 201);
+        const data = await response.json();
+        assert.match(data.message, /approve admin access/);
+        assert.equal(data.accessToken, undefined);
+        assert.equal(data.refreshToken, undefined);
+    } finally { process.env.ADMIN_REGISTRATION_KEY = legacyKey; }
+});
+
+test("approved admins can login and refresh", async () => {
+    const user = { ...admin, password: await bcrypt.hash("secret123", 4), save: async () => {} };
+    mock.method(User, "findOne", () => ({ select: async () => user }));
+    const response = await request("/api/auth/login", "POST", { username: "owner", password: "secret123" });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.ok(data.accessToken);
+    assert.equal(user.refreshToken, data.refreshToken);
+    mock.method(User, "findById", () => ({ select: async () => user }));
+    assert.equal((await request("/api/auth/refresh-token", "POST", { refreshToken: data.refreshToken })).status, 200);
+});
+
 test("customer accounts cannot login or refresh into an admin session", async () => {
     const password = await bcrypt.hash("secret123", 4);
     mock.method(User, "findOne", () => ({ select: async () => ({ ...admin, role: "customer", password }) }));

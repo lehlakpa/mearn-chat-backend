@@ -34,8 +34,8 @@ function authMode() {
         label.querySelector("input").required = registering;
         label.querySelector("input").disabled = !registering;
     });
-    $("#auth-title").textContent = registering ? "Create admin account." : "Welcome back.";
-    $("#auth-submit").textContent = registering ? "Register admin" : "Login to dashboard";
+    $("#auth-title").textContent = registering ? "Create account." : "Welcome back.";
+    $("#auth-submit").textContent = registering ? "Create account" : "Login to dashboard";
     $("#auth-form").elements.password.autocomplete = registering ? "new-password" : "current-password";
     $("#login-tab").setAttribute("aria-pressed", String(!registering));
     $("#register-tab").setAttribute("aria-pressed", String(registering));
@@ -51,7 +51,7 @@ $("#auth-form").addEventListener("submit", async event => {
             registering = false;
             event.target.reset();
             authMode();
-            message("Admin account created. Login to continue.");
+            message(data.message);
         } else {
             accessToken = data.accessToken; refreshToken = data.refreshToken;
             sessionStorage.setItem("adminAccessToken", accessToken);

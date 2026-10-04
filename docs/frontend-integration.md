@@ -11,7 +11,7 @@ These are routes to implement in the frontend router, not additional backend API
 | `/` | Public | Product cards, search, category filter, availability, details links |
 | `/products/:id` | Public | Image, title, description, category, NPR price, stock availability |
 | `/admin/login` | Public | Admin login form; successful login redirects to `/admin` |
-| `/admin/register` | Private-key registration | Name, username, password, phone number, admin registration key |
+| `/admin/register` | Public signup | Name, username, password, phone number; owner approval required for admin access |
 | `/admin` | Admin | Product count, total units, low/out-of-stock count, category count |
 | `/admin/products` | Admin | Inventory table, category/search/stock filters, edit actions |
 | `/admin/products/new` | Admin | Create product with image upload |
@@ -28,7 +28,7 @@ All paths below are relative to the API origin.
 
 | Method | Path | Access | Success response |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | Registration key | `201 { success, message, user }` |
+| POST | `/api/auth/register` | Public | `201 { success, message, user }` |
 | POST | `/api/auth/login` | Admin credentials | `{ success, message, accessToken, refreshToken, user }` |
 | POST | `/api/auth/refresh-token` | Refresh token | `{ success, message, accessToken }` |
 | POST | `/api/auth/logout` | Admin bearer token | `{ success, message }` |
@@ -54,12 +54,13 @@ Registration:
   "name": "Store Owner",
   "username": "owner",
   "password": "a-strong-password",
-  "phoneNumber": "9800000000",
-  "adminKey": "key-entered-by-the-store-owner"
+  "phoneNumber": "9800000000"
 }
 ```
 
-The password must be at least 6 characters and at most 72 UTF-8 bytes. Registration creates an admin account but does not return tokens: redirect to login after success. The registration key must match the backend's `ADMIN_REGISTRATION_KEY`. Never hardcode it in frontend code or expose it as a frontend environment variable. Registration returns `503` if the server key is not configured, or `403` for a missing/incorrect key. Existing non-admin accounts cannot login; a trusted account must be explicitly promoted by the owner as documented in the root README.
+The password must be at least 6 characters and at most 72 UTF-8 bytes. Registration creates a non-admin (`customer`) account and returns no tokens. Remove the registration-key field and do not send or embed a key. Client-supplied `role` and `adminKey` cannot grant privileges. Registration works whether or not the old `ADMIN_REGISTRATION_KEY` environment variable is set.
+
+After success, display the server response `message`: the store owner must approve admin access before dashboard login. The owner promotes a trusted account through MongoDB as documented in the root README. Unapproved accounts receive `403` on login and cannot refresh into an admin session. Existing approved admins continue to log in normally.
 
 Login:
 
@@ -190,3 +191,7 @@ Show the reference and product total after success, clear/hide the form, and ref
 Admins can read orders via `GET /api/orders?page=1` with a bearer token. Response: `{ success, orders, page, hasMore }`, with up to 50 orders per page, newest first. Orders contain `_id`, customer contact/address/notes, product snapshot, quantity, unit price, total, payment method, status and timestamps. Customer data is not publicly readable. The bundled admin dashboard has an Incoming orders table with refresh and pagination.
 
 MongoDB must support transactions (Atlas, a replica set, or a sharded cluster). A standalone MongoDB server is insufficient. Startup initializes the Order model and its unique request-ID index before accepting requests. No additional environment variables are needed for orders.
+
+## Security update
+
+Handle HTTP 429 by showing the server message and waiting for Retry-After before retrying. Oversized JSON/form requests return 413 (16 KB limit). Existing sessions need login again after the token-type update. Limits and deployment proxy configuration are documented in the root README.
