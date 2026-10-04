@@ -7,10 +7,12 @@ import { validateSecrets } from "./config/security.js";
 validateSecrets();
 
 const PORT = process.env.PORT || 3000;
+console.log("Startup: connecting to MongoDB...");
 connectDB().then(async () => {
+    console.log("Startup: initializing order indexes...");
     await Order.init();
-    app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+    app.listen(PORT, "0.0.0.0", () => console.log(`Server is running on 0.0.0.0:${PORT}`));
 }).catch(error => {
-    console.error("Failed to connect to database:", error.message);
+    console.error("Server startup failed:", error.message);
     process.exitCode = 1;
 });
