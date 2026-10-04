@@ -11,6 +11,24 @@ Express / MongoDB store with a public product catalog and an admin inventory das
 
 Customers can browse/search products, filter categories and view product details without an account. Approved admins can log in, add products with images, edit products/categories, update stock and set a per-product low-stock limit. The category field accepts a new category or an existing suggestion. A stock quantity at or below the limit appears in the low-stock filter, including out-of-stock products.
 
+## Deploy on Render
+
+Deploy this repository as one Node Web Service. Express serves both the frontend in `Backend/public` and the API. The frontend uses relative `/api/...` URLs, so it automatically calls the same Render domain; no frontend `.env` or `VITE_API_URL` is needed.
+
+Create a Render Blueprint using the repository's `render.yaml`, or configure an existing Web Service with:
+
+- Root Directory: `Backend`
+- Build Command: `npm ci`
+- Start Command: `node index.js`
+- Health Check Path: `/api/health`
+- Environment: `NODE_ENV=production`, `NODE_VERSION=22`
+
+Set `MONGO_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in Render's environment settings. Use distinct random JWT secrets of at least 32 bytes. Never put these secrets in frontend files. Let Render supply `PORT`; the server binds to `0.0.0.0` using that value.
+
+After deployment, open the assigned Render URL for the storefront, `/admin` for the dashboard, and `/api/health` to check the service. Updating `render.yaml` does not automatically reconfigure a manually created service; apply the settings above in its dashboard.
+
+Startup waits for MongoDB and order indexes before opening the port. A port scan timeout can therefore indicate a database/startup failure. Check the earlier startup logs and confirm the MongoDB connection settings and network access permit the Render service to connect.
+
 ## Admin access
 
 Registration is public and requires only name, username, password, and phone number. It always creates a `customer` account. Client-supplied `role` or `adminKey` cannot grant admin privileges. No key is required. Login and refresh remain admin-only.

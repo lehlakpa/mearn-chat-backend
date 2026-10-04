@@ -6,9 +6,12 @@ services:
     rootDir: Backend
     buildCommand: npm ci
     startCommand: node index.js
+    healthCheckPath: /api/health
     envVars:
-      - key: PORT
-        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
       - key: MONGO_URI
         sync: false
       - key: JWT_SECRET
