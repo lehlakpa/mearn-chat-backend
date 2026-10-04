@@ -30,6 +30,9 @@ const productSchema = new mongoose.Schema(
             required: true,
             trim: true,
         },
+        category: { type: String, trim: true, default: "Uncategorized", required: true },
+        stock: { type: Number, default: 0, min: 0, validate: Number.isSafeInteger },
+        lowStockThreshold: { type: Number, default: 5, min: 0, validate: Number.isSafeInteger },
     },
     {
         timestamps: true,

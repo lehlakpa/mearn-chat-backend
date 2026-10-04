@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Our products</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/store.js"></script></head>
+<body>
+<header><a class="brand" href="/">LOCAL<span> STORE</span></a><a href="/admin">Admin portal ↗</a></header>
+<main>
+<section class="hero"><p class="eyebrow">THE COLLECTION</p><h1>Find your next<br>everyday essential.</h1><p>Explore our products, discover the details, and check availability.</p></section>
+<div class="toolbar"><label class="search">Search products<input id="search" type="search" placeholder="Search by name or description…"></label><label>Category<select id="category"><option value="">All categories</option></select></label></div>
+<p id="message" role="status" aria-live="polite">Loading products…</p>
+<section id="products" class="grid" aria-label="Products"></section>
+</main>
+<dialog id="detail"><button id="close-detail" class="close" aria-label="Close product details">✕</button><div id="detail-content"></div></dialog>
+<dialog id="order-dialog" aria-labelledby="order-title">
+<button id="close-order" class="close" aria-label="Close order form">✕</button>
+<h2 id="order-title">Order product</h2><p id="order-product"></p>
+<p id="order-message" role="status" aria-live="polite"></p>
+<form id="order-form">
+<label>Full name (optional)<input name="customerName" autocomplete="name" maxlength="100"></label>
+<label>Phone number (optional)<input name="phoneNumber" type="tel" autocomplete="tel" maxlength="25"></label>
+<label>Email (optional)<input name="email" type="email" autocomplete="email" maxlength="254"></label>
+<label>Delivery address<textarea name="address" autocomplete="street-address" rows="3" maxlength="500" required></textarea></label>
+<label>Quantity<input name="quantity" type="number" min="1" max="10000" step="1" value="1" required></label>
+<label>Notes (optional)<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+<p>Payment: <strong>Cash on Delivery</strong><br>Product total: <strong id="order-total"></strong></p>
+<small>Contact details are optional. If provided, the store can contact you to arrange delivery.</small>
+<button id="place-order" type="submit">Place order</button>
+</form>
+</dialog>
+<footer>Browse freely. No customer account needed.</footer>
+</body></html>

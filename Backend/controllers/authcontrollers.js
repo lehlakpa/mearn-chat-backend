@@ -1,5 +1,6 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcrypt";
+import { timingSafeEqual } from "node:crypto";
 import {
     generateAccessToken,
     generateRefreshToken,
@@ -14,6 +15,19 @@ import {
 export const registerUser = async (req, res) => {
     const { name, username, password, phoneNumber } = req.body;
 
+    const expectedKey = process.env.ADMIN_REGISTRATION_KEY;
+    const suppliedKey = req.body.adminKey;
+    if (!expectedKey) {
+        return res.status(503).json({ success: false, message: "Admin registration is disabled. Configure ADMIN_REGISTRATION_KEY on the server." });
+    }
+    if (typeof suppliedKey !== "string" || Buffer.byteLength(suppliedKey) !== Buffer.byteLength(expectedKey) ||
+        !timingSafeEqual(Buffer.from(suppliedKey), Buffer.from(expectedKey))) {
+        return res.status(403).json({ success: false, message: "A valid admin registration key is required" });
+    }
+    if (![name, username, password, phoneNumber].every(value => typeof value === "string" && value.trim()) || password.length < 6 || Buffer.byteLength(password) > 72) {
+        return res.status(400).json({ success: false, message: "All fields are required; password must be at least 6 characters and at most 72 bytes" });
+    }
+
     if (!name || !username || !password || !phoneNumber) {
         return res.status(400).json({
             success: false,
@@ -23,7 +37,7 @@ export const registerUser = async (req, res) => {
 
     try {
         // Check if username already exists
-        const existingUser = await User.findOne({ username: username.toLowerCase() });
+        const existingUser = await User.findOne({ username: username.trim().toLowerCase() });
         if (existingUser) {
             return res.status(400).json({
                 success: false,
@@ -41,13 +55,14 @@ export const registerUser = async (req, res) => {
             username: username.toLowerCase(),
             password: hashedPassword,
             phoneNumber,
+            role: "admin",
         });
 
         await user.save();
 
         res.status(201).json({
             success: true,
-            message: "User registered successfully",
+            message: "Admin registered successfully",
             user: {
                 id: user._id,
                 name: user.name,
@@ -73,7 +88,7 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
     const { username, password } = req.body;
 
-    if (!username || !password) {
+    if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password) {
         return res.status(400).json({
             success: false,
             message: "Username and password are required",
@@ -81,7 +96,7 @@ export const loginUser = async (req, res) => {
     }
 
     try {
-        const user = await User.findOne({ username: username.toLowerCase() }).select("+password +refreshToken");
+        const user = await User.findOne({ username: username.trim().toLowerCase() }).select("+password +refreshToken");
         if (!user) {
             return res.status(400).json({
                 success: false,
@@ -95,6 +110,10 @@ export const loginUser = async (req, res) => {
                 success: false,
                 message: "Invalid credentials",
             });
+        }
+
+        if (user.role !== "admin") {
+            return res.status(403).json({ success: false, message: "Login is available to admins only" });
         }
 
         // Generate tokens
@@ -145,7 +164,7 @@ export const refreshAccessToken = async (req, res) => {
         const decoded = verifyRefreshToken(refreshToken);
 
         const user = await User.findById(decoded.id).select("+refreshToken");
-        if (!user || user.refreshToken !== refreshToken) {
+        if (!user || user.role !== "admin" || user.refreshToken !== refreshToken) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid refresh token",

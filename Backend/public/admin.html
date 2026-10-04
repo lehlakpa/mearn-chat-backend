@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin · Local Store</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/admin.js"></script></head>
+<body>
+<header><a class="brand" href="/">LOCAL<span> STORE</span></a><nav><a href="/">View store ↗</a><button id="logout" class="secondary" hidden>Log out</button></nav></header>
+<main>
+<p id="message" role="status" aria-live="polite"></p>
+<section id="auth" class="auth" hidden>
+<p class="eyebrow">ADMIN PORTAL</p><h1 id="auth-title">Welcome back.</h1><p>Manage your products and inventory.</p>
+<div class="tabs"><button id="login-tab" class="secondary" type="button">Login</button><button id="register-tab" class="secondary" type="button">Register admin</button></div>
+<form id="auth-form">
+<label class="registration" hidden>Full name<input name="name" autocomplete="name"></label>
+<label>Username<input name="username" autocomplete="username" required></label>
+<label>Password<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
+<label class="registration" hidden>Phone number<input name="phoneNumber" type="tel" autocomplete="tel"></label>
+<label class="registration" hidden>Admin registration key<input name="adminKey" type="password" autocomplete="off"><small>Use the private key provided by the store owner.</small></label>
+<button id="auth-submit" type="submit">Login to dashboard</button>
+</form></section>
+<section id="dashboard" hidden>
+<div class="section-heading"><div><p class="eyebrow">ADMIN / INVENTORY</p><h1>Product dashboard</h1><p>Keep your catalog fresh and your stock in check.</p></div><button id="add-product">+ Add product</button></div>
+<div class="stats"><article><span>Products</span><strong id="total-products">0</strong></article><article><span>Units in stock</span><strong id="total-stock">0</strong></article><article><span>Low / out of stock</span><strong id="total-low">0</strong></article><article><span>Categories</span><strong id="total-categories">0</strong></article></div>
+<div class="toolbar"><label class="search">Search inventory<input id="search" type="search" placeholder="Search products…"></label><label>Category<select id="category"><option value="">All categories</option></select></label><label>Availability<select id="stock-filter"><option value="">All stock</option><option value="low">Low / out of stock</option><option value="out">Out of stock</option></select></label></div>
+<div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="inventory"></tbody></table></div><p id="empty" hidden>No matching products. Add a product or change your filters.</p>
+<section aria-labelledby="orders-title">
+<div class="section-heading"><div><p class="eyebrow">CUSTOMER ORDERS</p><h2 id="orders-title">Incoming orders</h2></div><button id="refresh-orders" class="secondary">Refresh orders</button></div>
+<p id="orders-message" role="status"></p>
+<div class="table-wrap"><table><thead><tr><th>Order / date</th><th>Customer</th><th>Delivery details</th><th>Product</th><th>Quantity</th><th>Total</th><th>Status</th></tr></thead><tbody id="orders"></tbody></table></div>
+<div class="toolbar"><button id="previous-orders" class="secondary" disabled>Previous</button><span id="orders-page">Page 1</span><button id="next-orders" class="secondary" disabled>Next</button></div>
+</section>
+</section>
+</main>
+<dialog id="editor"><button id="close-editor" class="close" aria-label="Close editor">✕</button><h2 id="editor-title">Add product</h2><p id="form-message" role="status"></p>
+<form id="product-form">
+<label>Product name<input name="title" required></label>
+<label>Description<textarea name="description" rows="4" required></textarea></label>
+<div class="form-row"><label>Price (NPR)<input name="price" type="number" min="0" step="0.01" required></label><label>Category<input name="category" list="categories" placeholder="e.g. Clothing" required></label></div><datalist id="categories"></datalist>
+<div class="form-row"><label>Stock quantity<input name="stock" type="number" min="0" step="1" value="0" required></label><label>Low-stock limit<input name="lowStockThreshold" type="number" min="0" step="1" value="5" required></label></div>
+<label>Product image<input name="image" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP, up to 5 MB. Leave empty when editing to keep the existing image.</small></label><img id="preview" class="preview" alt="Product image preview" hidden>
+<button type="submit">Save product</button>
+</form></dialog>
+<footer>Local Store · Admin workspace</footer>
+</body></html>

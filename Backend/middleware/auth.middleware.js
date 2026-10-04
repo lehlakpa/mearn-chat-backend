@@ -1,6 +1,7 @@
 import { verifyAccessToken } from "../utils/token.js";
+import User from "../models/user.model.js";
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -14,7 +15,10 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const decoded = verifyAccessToken(token);
-        req.user = decoded;
+        const user = await User.findById(decoded.id);
+        if (!user) return res.status(401).json({ success: false, message: "Account no longer exists" });
+        if (user.role !== "admin") return res.status(403).json({ success: false, message: "Admin access required" });
+        req.user = { id: user._id, username: user.username };
         next();
     } catch (error) {
         return res.status(401).json({

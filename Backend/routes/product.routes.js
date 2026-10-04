@@ -5,6 +5,7 @@ import {
     getProductById,
     updateProduct,
     deleteProduct,
+    getLowStockProducts,
 } from "../controllers/product.controller.js";
 import authMiddleware from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer_middleware.js";
@@ -13,6 +14,7 @@ const router = express.Router();
 
 // GET  /api/products         - Get all products (public)
 router.get("/", getAllProducts);
+router.get("/low-stock", authMiddleware, getLowStockProducts);
 
 // GET  /api/products/:id     - Get single product (public)
 router.get("/:id", getProductById);
