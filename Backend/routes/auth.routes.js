@@ -16,8 +16,8 @@ router.post("/register", registrationLimiter, registerUser);
 // POST /api/auth/login
 router.post("/login", loginLimiter, loginUser);
 
-// POST /api/auth/refresh-token
-router.post("/refresh-token", refreshLimiter, refreshAccessToken);
+// Keep the existing URL for clients that already use it.
+router.post(["/refresh", "/refresh-token"], refreshLimiter, refreshAccessToken);
 
 // POST /api/auth/logout  (protected)
 router.post("/logout", authMiddleware, logoutUser);

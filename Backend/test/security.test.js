@@ -7,8 +7,8 @@ import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRef
 
 let server, base;
 before(async () => {
-    process.env.JWT_SECRET = "test-secret";
-    process.env.JWT_REFRESH_SECRET = "test-secret";
+    process.env.ACCESS_TOKEN_SECRET = "test-secret";
+    process.env.REFRESH_TOKEN_SECRET = "test-secret";
     server = app.listen(0, "127.0.0.1");
     await once(server, "listening");
     base = `http://127.0.0.1:${server.address().port}`;
@@ -26,9 +26,9 @@ test("access and refresh tokens cannot be interchanged even with equal secrets",
 
 test("startup rejects absent, short, or shared JWT secrets", () => {
     assert.throws(() => validateSecrets({}));
-    assert.throws(() => validateSecrets({ JWT_SECRET: "short", JWT_REFRESH_SECRET: "b".repeat(32) }));
-    assert.throws(() => validateSecrets({ JWT_SECRET: "a".repeat(32), JWT_REFRESH_SECRET: "a".repeat(32) }));
-    assert.doesNotThrow(() => validateSecrets({ JWT_SECRET: "a".repeat(32), JWT_REFRESH_SECRET: "b".repeat(32) }));
+    assert.throws(() => validateSecrets({ ACCESS_TOKEN_SECRET: "short", REFRESH_TOKEN_SECRET: "b".repeat(32) }));
+    assert.throws(() => validateSecrets({ ACCESS_TOKEN_SECRET: "a".repeat(32), REFRESH_TOKEN_SECRET: "a".repeat(32) }));
+    assert.doesNotThrow(() => validateSecrets({ ACCESS_TOKEN_SECRET: "a".repeat(32), REFRESH_TOKEN_SECRET: "b".repeat(32) }));
 });
 
 test("responses prevent framing, MIME sniffing, inline scripts and API caching", async () => {

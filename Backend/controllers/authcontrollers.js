@@ -4,6 +4,7 @@ import {
     generateAccessToken,
     generateRefreshToken,
     verifyRefreshToken,
+    isTokenError,
 } from "../utils/token.js";
 
 // ─────────────────────────────────────────
@@ -132,7 +133,7 @@ export const loginUser = async (req, res) => {
 };
 
 // ─────────────────────────────────────────
-// @route   POST /api/auth/refresh-token
+// @route   POST /api/auth/refresh (also /api/auth/refresh-token)
 // @desc    Get new accessToken using refreshToken
 // @access  Public
 // ─────────────────────────────────────────
@@ -140,7 +141,7 @@ export const refreshAccessToken = async (req, res) => {
     const { refreshToken } = req.body ?? {};
 
     if (typeof refreshToken !== "string" || !refreshToken || refreshToken.length > 4096) {
-        return res.status(400).json({
+        return res.status(401).json({
             success: false,
             message: "Refresh token is required",
         });
@@ -165,10 +166,12 @@ export const refreshAccessToken = async (req, res) => {
             accessToken: newAccessToken,
         });
     } catch (error) {
-        console.error("Refresh token error:", error);
-        res.status(401).json({
+        const tokenError = isTokenError(error);
+        res.status(tokenError ? 401 : 500).json({
             success: false,
-            message: "Refresh token expired or invalid. Please login again.",
+            message: tokenError
+                ? (error.name === "TokenExpiredError" ? "Refresh token expired" : "Invalid refresh token")
+                : "Internal server error",
         });
     }
 };

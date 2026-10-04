@@ -17,8 +17,8 @@ let server, base;
 const id = "507f1f77bcf86cd799439011";
 const admin = { _id: id, username: "owner", role: "admin" };
 before(async () => {
-    process.env.JWT_SECRET = "test-access-secret";
-    process.env.JWT_REFRESH_SECRET = "test-refresh-secret";
+    process.env.ACCESS_TOKEN_SECRET = "test-access-secret";
+    process.env.REFRESH_TOKEN_SECRET = "test-refresh-secret";
     process.env.ADMIN_REGISTRATION_KEY = "test-private-registration-key";
     server = app.listen(0, "127.0.0.1");
     await once(server, "listening");

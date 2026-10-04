@@ -1,17 +1,18 @@
-import { verifyAccessToken } from "../utils/token.js";
+import { verifyAccessToken, isTokenError } from "../utils/token.js";
 import User from "../models/user.model.js";
 
 const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
+    const bearer = typeof authHeader === "string" && /^Bearer\s+(\S+)$/i.exec(authHeader);
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!bearer) {
         return res.status(401).json({
             success: false,
             message: "Access token missing or invalid",
         });
     }
 
-    const token = authHeader.split(" ")[1];
+    const token = bearer[1];
 
     try {
         const decoded = verifyAccessToken(token);
@@ -21,9 +22,12 @@ const authMiddleware = async (req, res, next) => {
         req.user = { id: user._id, username: user.username };
         next();
     } catch (error) {
-        return res.status(401).json({
+        const tokenError = isTokenError(error);
+        return res.status(tokenError ? 401 : 500).json({
             success: false,
-            message: "Token expired or invalid. Please login again.",
+            message: tokenError
+                ? (error.name === "TokenExpiredError" ? "Access token expired" : "Invalid access token")
+                : "Internal server error",
         });
     }
 };
