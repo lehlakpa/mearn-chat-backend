@@ -65,7 +65,10 @@ $("#order-form").addEventListener("submit", async event => {
         } catch { $("#message").textContent = "Order received. Refresh the page to see updated stock."; }
     } catch (error) {
         $("#order-message").classList.add("error");
-        if ([400, 409].includes(error.status)) {
+        if (error.status === 429) {
+            $("#order-message").textContent = error.message;
+            $("#place-order").textContent = "Retry order";
+        } else if ([400, 409, 413].includes(error.status)) {
             pendingOrderBody = null;
             event.target.querySelectorAll("input, textarea").forEach(input => { input.disabled = false; });
             $("#order-message").textContent = error.message;

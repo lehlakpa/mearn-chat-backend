@@ -1,11 +1,12 @@
 import { $, api, esc, money, stock, low, status, image, categories, setCategories, matches } from "./shared.js";
 let products = [], editingId = null, registering = location.pathname === "/admin/register", previewUrl;
-let accessToken = sessionStorage.getItem("adminAccessToken");
-let refreshToken = sessionStorage.getItem("adminRefreshToken");
+// Remove credentials left behind by the previous browser-storage implementation.
+sessionStorage.removeItem("adminAccessToken");
+sessionStorage.removeItem("adminRefreshToken");
+let refreshRequest;
 let ordersPage = 1;
 const message = (text, error = false) => { $("#message").textContent = text; $("#message").classList.toggle("error", error); };
 function clearSession() {
-    accessToken = refreshToken = null;
     sessionStorage.removeItem("adminAccessToken");
     sessionStorage.removeItem("adminRefreshToken");
     $("#editor").close();
@@ -14,13 +15,12 @@ function clearSession() {
     $("#orders").replaceChildren();
 }
 async function authorized(path, options = {}, retry = true) {
-    try { return await api(path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${accessToken}` } }); }
+    try { return await api(path, { ...options, credentials: "include" }); }
     catch (error) {
-        if (error.status === 401 && refreshToken && retry) {
+        if (error.status === 401 && retry) {
             try {
-                const data = await api("/api/auth/refresh-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken }) });
-                accessToken = data.accessToken;
-                sessionStorage.setItem("adminAccessToken", accessToken);
+                refreshRequest ??= api("/api/auth/refresh-token", { method: "POST", credentials: "include" }).finally(() => { refreshRequest = undefined; });
+                await refreshRequest;
             } catch (refreshError) { clearSession(); throw refreshError; }
             return authorized(path, options, false);
         }
@@ -42,30 +42,43 @@ function authMode() {
 }
 $("#login-tab").onclick = () => { registering = false; authMode(); };
 $("#register-tab").onclick = () => { registering = true; authMode(); };
+const passwordInput = $("#auth-form").elements.password;
+passwordInput.addEventListener("input", () => {
+    passwordInput.setCustomValidity(new TextEncoder().encode(passwordInput.value).length > 72 ? "Password must be at most 72 bytes. Try fewer characters." : "");
+});
 $("#auth-form").addEventListener("submit", async event => {
     event.preventDefault();
+    const isRegistration = registering;
+    const username = event.target.elements.username.value.trim();
     $("#auth-submit").disabled = true;
+    $("#login-tab").disabled = $("#register-tab").disabled = true;
+    $("#auth-submit").textContent = isRegistration ? "Creating account…" : "Logging in…";
+    message("");
     try {
         const data = await api(`/api/auth/${registering ? "register" : "login"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
-        if (registering) {
+        if (isRegistration) {
             registering = false;
             event.target.reset();
+            event.target.elements.username.value = username;
             authMode();
             message(data.message);
+            event.target.elements.password.focus();
         } else {
-            accessToken = data.accessToken; refreshToken = data.refreshToken;
-            sessionStorage.setItem("adminAccessToken", accessToken);
-            sessionStorage.setItem("adminRefreshToken", refreshToken);
             event.target.reset();
             await dashboard();
         }
     } catch (error) { message(error.message, true); }
-    finally { $("#auth-submit").disabled = false; }
+    finally {
+        $("#auth-submit").disabled = false;
+        $("#login-tab").disabled = $("#register-tab").disabled = false;
+        authMode();
+    }
 });
 $("#logout").onclick = async () => {
-    try { await authorized("/api/auth/logout", { method: "POST" }); }
-    catch { /* Local logout should still work when offline. */ }
-    clearSession(); message("Logged out.");
+    try {
+        await api("/api/auth/logout", { method: "POST", credentials: "include" });
+        clearSession(); message("Logged out.");
+    } catch (error) { message(error.message, true); }
 };
 function render() {
     const visible = products.filter(p => matches(p) && ($("#stock-filter").value === "low" ? low(p) : $("#stock-filter").value === "out" ? stock(p) === 0 : true));
@@ -161,14 +174,12 @@ $("#product-form").addEventListener("submit", async event => {
     } catch (error) {
         $("#form-message").textContent = error.message;
         $("#form-message").classList.add("error");
-        if (!accessToken) message(error.message, true);
+        if (!$("#auth").hidden) message(error.message, true);
     } finally { submit.disabled = false; $("#close-editor").disabled = false; }
 });
 $("#editor").addEventListener("cancel", event => {
     if ($("#product-form").querySelector('[type="submit"]').disabled) event.preventDefault();
 });
 authMode();
-if (accessToken) {
-    try { await dashboard(); }
-    catch (error) { clearSession(); message(error.message, true); }
-} else clearSession();
+try { await dashboard(); }
+catch (error) { clearSession(); if (error.status !== 401) message(error.message, true); }

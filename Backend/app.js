@@ -19,7 +19,24 @@ app.use(helmet({
     strictTransportSecurity: process.env.NODE_ENV === "production" ? undefined : false,
 }));
 app.use("/api", (req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
-app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"], allowedHeaders: ["Content-Type", "Authorization"] }));
+app.use("/api", (req, res, next) => {
+    if (app.locals.isReady && !app.locals.isReady()) {
+        return res.status(503).json({ success: false, message: "Service is not ready. Please try again shortly." });
+    }
+    next();
+});
+const allowedOrigins = () => (process.env.CORS_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean);
+app.use(cors({ origin: (origin, callback) => callback(null, !!origin && allowedOrigins().includes(origin)), credentials: true, methods: ["GET", "POST", "PUT", "DELETE"], allowedHeaders: ["Content-Type", "Authorization"] }));
+// SameSite cookies plus origin checks protect browser mutations (including login).
+app.use("/api", (req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    const origin = req.get("origin");
+    const sameOrigin = `${process.env.NODE_ENV === "production" ? "https" : req.protocol}://${req.get("host")}`;
+    if ((origin && origin !== sameOrigin && !allowedOrigins().includes(origin)) || (!origin && req.get("sec-fetch-site") === "cross-site")) {
+        return res.status(403).json({ success: false, message: "Request origin is not allowed" });
+    }
+    next();
+});
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: false, limit: "16kb", parameterLimit: 20 }));
 app.use("/api/auth", authRoutes);

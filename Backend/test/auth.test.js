@@ -22,15 +22,18 @@ before(async () => {
 after(() => new Promise(resolve => server.close(resolve)));
 afterEach(() => mock.restoreAll());
 
-const request = (path, { body, authorization } = {}) => fetch(base + path, {
+const request = (path, { body, authorization, cookie, origin } = {}) => fetch(base + path, {
     method: body === undefined ? "GET" : "POST",
     headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(authorization === undefined ? {} : { Authorization: authorization }),
+        ...(cookie === undefined ? {} : { Cookie: cookie }),
+        ...(origin === undefined ? {} : { Origin: origin }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
-const refresh = token => request("/api/auth/refresh", { body: { refreshToken: token } });
+const refresh = token => request("/api/auth/refresh", { body: {}, cookie: token === undefined ? undefined : `refreshToken=${encodeURIComponent(token)}` });
+const cookies = response => Object.fromEntries(response.headers.getSetCookie().map(value => value.split(";")[0].split("=")));
 const protectedRequest = token => request("/api/admin/me", { authorization: `Bearer ${token}` });
 const signed = (type, payload = {}, options = {}) => jwt.sign(
     { id: admin._id, tokenType: type, ...payload },
@@ -45,28 +48,41 @@ test("login, expired access, refresh, protected request and logout preserve the 
         assert.equal(id, admin._id);
         return { then: resolve => resolve(user), select: async () => user };
     });
-    mock.method(User, "findByIdAndUpdate", async (id, update) => {
-        assert.equal(id, admin._id);
-        user.refreshToken = update.refreshToken;
+    mock.method(User, "updateOne", async (filter, update) => {
+        assert.equal(filter._id, admin._id);
+        assert.equal(filter.refreshToken, user.refreshToken);
+        user.refreshToken = update.$set.refreshToken;
     });
     const login = await request("/api/auth/login", { body: { username: "owner", password: "secret123" } });
     assert.equal(login.status, 200);
-    const tokens = await login.json();
+    const tokens = cookies(login);
+    const data = await login.json();
+    assert.equal(data.accessToken, undefined);
+    assert.equal(data.refreshToken, undefined);
+    for (const cookie of login.headers.getSetCookie()) {
+        assert.match(cookie, /HttpOnly/);
+        assert.match(cookie, /SameSite=Strict/);
+        assert.match(cookie, /Max-Age=/);
+    }
     assert.ok(tokens.accessToken);
     assert.ok(tokens.refreshToken);
     assert.equal(user.refreshToken, tokens.refreshToken);
-    assert.equal(tokens.user.password, undefined);
-    assert.equal((await protectedRequest(tokens.accessToken)).status, 200);
+    assert.equal(data.user.password, undefined);
+    assert.equal((await request("/api/admin/me", { cookie: `accessToken=${tokens.accessToken}` })).status, 200);
     const expired = await protectedRequest(signed("access", {}, { expiresIn: -1 }));
     assert.equal(expired.status, 401);
     assert.equal((await expired.json()).message, "Access token expired");
     const refreshed = await refresh(tokens.refreshToken);
     assert.equal(refreshed.status, 200);
-    const newTokens = await refreshed.json();
+    const newTokens = cookies(refreshed);
+    assert.equal((await refreshed.json()).accessToken, undefined);
     assert.ok(newTokens.accessToken);
     assert.equal((await protectedRequest(newTokens.accessToken)).status, 200);
-    assert.equal((await request("/api/auth/refresh-token", { body: { refreshToken: tokens.refreshToken } })).status, 200);
-    assert.equal((await request("/api/auth/logout", { body: {}, authorization: `Bearer ${newTokens.accessToken}` })).status, 200);
+    assert.equal((await request("/api/auth/refresh-token", { body: {}, cookie: `refreshToken=${tokens.refreshToken}` })).status, 200);
+    const logout = await request("/api/auth/logout", { body: {}, cookie: `refreshToken=${tokens.refreshToken}` });
+    assert.equal(logout.status, 200);
+    assert.equal(logout.headers.getSetCookie().length, 2);
+    for (const cookie of logout.headers.getSetCookie()) assert.match(cookie, /Expires=Thu, 01 Jan 1970/);
     assert.equal(user.refreshToken, null);
     assert.equal((await refresh(tokens.refreshToken)).status, 401);
 });
@@ -137,6 +153,41 @@ test("tokens have minimal consistent payloads, separate secrets and configurable
         assert.equal(shortAccess.exp - shortAccess.iat, 30);
         assert.equal(shortRefresh.exp - shortRefresh.iat, 3600);
     } finally {
+        delete process.env.ACCESS_TOKEN_EXPIRES_IN;
+        delete process.env.REFRESH_TOKEN_EXPIRES_IN;
+    }
+});
+
+test("refresh requires a cookie and cross-origin mutations are rejected", async () => {
+    const token = generateRefreshToken(admin);
+    assert.equal((await request("/api/auth/refresh", { body: { refreshToken: token } })).status, 401);
+    for (const path of ["/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/products"]) {
+        assert.equal((await request(path, { body: {}, origin: "https://untrusted.example" })).status, 403);
+    }
+    assert.equal((await request("/api/auth/logout", { body: {}, origin: base })).status, 200);
+    assert.equal((await request("/api/admin/me", { cookie: "accessToken=%E0%A4%A" })).status, 401);
+});
+
+test("production cookies are secure and their lifetimes match configured JWT expiry", async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    process.env.ACCESS_TOKEN_EXPIRES_IN = "30s";
+    process.env.REFRESH_TOKEN_EXPIRES_IN = "1h";
+    try {
+        const user = { ...admin, password: await bcrypt.hash("secret123", 4), save: async () => {} };
+        mock.method(User, "findOne", () => ({ select: async () => user }));
+        const response = await request("/api/auth/login", { body: { username: "owner", password: "secret123" } });
+        assert.equal(response.status, 200);
+        const [access, refreshCookie] = response.headers.getSetCookie();
+        assert.match(access, /Path=\/api;/);
+        assert.match(refreshCookie, /Path=\/api\/auth;/);
+        for (const [cookie, seconds] of [[access, 30], [refreshCookie, 3600]]) {
+            assert.match(cookie, /; Secure;/);
+            const maxAge = Number(/Max-Age=(\d+)/.exec(cookie)[1]);
+            assert.ok(maxAge > seconds - 3 && maxAge <= seconds);
+        }
+    } finally {
+        if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous;
         delete process.env.ACCESS_TOKEN_EXPIRES_IN;
         delete process.env.REFRESH_TOKEN_EXPIRES_IN;
     }

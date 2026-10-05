@@ -27,7 +27,7 @@ Set `MONGO_URI`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CLOUDINARY_CLOUD_NAME`, `C
 
 After deployment, open the assigned Render URL for the storefront, `/admin` for the dashboard, and `/api/health` to check the service. Updating `render.yaml` does not automatically reconfigure a manually created service; apply the settings above in its dashboard.
 
-Startup waits for MongoDB and order indexes before opening the port. A port scan timeout can therefore indicate a database/startup failure. Check the earlier startup logs and confirm the MongoDB connection settings and network access permit the Render service to connect.
+Startup opens `0.0.0.0:$PORT` before connecting to MongoDB and initializing order indexes. All API routes, including `/api/health`, return 503 until initialization completes, and when the database disconnects. Database server selection has a 15-second timeout; overall initialization has a 60-second deadline and exits on failure. Check earlier startup logs for missing secrets, database credentials/network access, or index initialization errors. Keep Render's health check at `/api/health` so it only routes traffic to a ready instance.
 
 ## Admin access
 
@@ -43,7 +43,7 @@ Verify the account owner and username first, and check that one account was upda
 
 Existing products default to category `Uncategorized`, stock `0`, and a low-stock limit of `5`; update their inventory in the dashboard.
 
-Public reads: `GET /api/products`, `GET /api/products/:id`. Admin-only writes: `POST /api/products`, `PUT /api/products/:id`, `DELETE /api/products/:id`; multipart images use the field `image` (JPEG/PNG/WebP, max 5 MB). Optional product fields are `category`, `stock`, and `lowStockThreshold`. `GET /api/products/low-stock` and `GET /api/admin/me` require an admin bearer token. `GET /api/health` is the health endpoint. Existing `/api/auth/*` paths are retained.
+Public reads: `GET /api/products`, `GET /api/products/:id`. Admin-only writes: `POST /api/products`, `PUT /api/products/:id`, `DELETE /api/products/:id`; multipart images use the field `image` (JPEG/PNG/WebP, max 5 MB). Optional product fields are `category`, `stock`, and `lowStockThreshold`. `GET /api/products/low-stock` and `GET /api/admin/me` require an admin access cookie (or bearer access token). `GET /api/health` is the health endpoint. Existing `/api/auth/*` paths are retained.
 
 Run `npm test` in `Backend` for the automated checks. Tests use isolated mocks and do not require a live database or Cloudinary account.
 
@@ -64,3 +64,7 @@ Login is limited to 30 attempts per IP per 15 minutes, signup to 10 per hour, re
 Behind a reverse proxy, configure TRUSTED_PROXIES with only that deployment's trusted proxy IP addresses/subnets, comma-separated. Do not trust arbitrary forwarded headers. Without this setting proxied visitors may share the proxy's rate budget. Verify client IP handling in the actual hosting environment before production rollout.
 
 Security headers follow Express guidance: https://expressjs.com/en/advanced/best-practice-security/. Inline scripts and framing by other origins are blocked; API responses use no-store. JSON/form bodies are limited to 16 KB and multipart uploads have bounded file, field, and part counts. Use HTTPS and NODE_ENV=production in deployment. This code review and dependency audit do not replace a live infrastructure security assessment.
+
+## JWT cookies
+
+Login stores access and refresh JWTs in HTTP-only cookies; the admin UI no longer stores tokens in sessionStorage. Access expires after 15 minutes and refresh after 7 days by default. Automatic refresh uses the refresh cookie; logout revokes refresh access and clears both cookies. Production uses Secure cookies and requires HTTPS. Existing sessions must log in again. Optional `CORS_ORIGINS` lists exact same-site frontend origins; the bundled frontend requires no setting. See [authentication integration](docs/frontend-integration.md#authentication-request-bodies).

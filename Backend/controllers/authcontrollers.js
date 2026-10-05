@@ -1,5 +1,6 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcrypt";
+import { readCookie, setAuthCookies, clearAuthCookies } from "../utils/auth-cookies.js";
 import {
     generateAccessToken,
     generateRefreshToken,
@@ -69,7 +70,7 @@ export const registerUser = async (req, res) => {
 
 // ─────────────────────────────────────────
 // @route   POST /api/auth/login
-// @desc    Login user, returns accessToken + refreshToken
+// @desc    Login user, sets HTTP-only access and refresh cookies
 // @access  Public
 // ─────────────────────────────────────────
 export const loginUser = async (req, res) => {
@@ -111,11 +112,10 @@ export const loginUser = async (req, res) => {
         user.refreshToken = refreshToken;
         await user.save();
 
+        setAuthCookies(res, accessToken, refreshToken);
         res.json({
             success: true,
             message: "Logged in successfully",
-            accessToken,
-            refreshToken,
             user: {
                 id: user._id,
                 name: user.name,
@@ -138,7 +138,7 @@ export const loginUser = async (req, res) => {
 // @access  Public
 // ─────────────────────────────────────────
 export const refreshAccessToken = async (req, res) => {
-    const { refreshToken } = req.body ?? {};
+    const refreshToken = readCookie(req, "refreshToken");
 
     if (typeof refreshToken !== "string" || !refreshToken || refreshToken.length > 4096) {
         return res.status(401).json({
@@ -160,10 +160,10 @@ export const refreshAccessToken = async (req, res) => {
 
         const newAccessToken = generateAccessToken(user);
 
+        setAuthCookies(res, newAccessToken);
         res.json({
             success: true,
             message: "Access token refreshed",
-            accessToken: newAccessToken,
         });
     } catch (error) {
         const tokenError = isTokenError(error);
@@ -183,7 +183,14 @@ export const refreshAccessToken = async (req, res) => {
 // ─────────────────────────────────────────
 export const logoutUser = async (req, res) => {
     try {
-        await User.findByIdAndUpdate(req.user.id, { refreshToken: null });
+        const refreshToken = readCookie(req, "refreshToken");
+        if (refreshToken) {
+            try {
+                const decoded = verifyRefreshToken(refreshToken);
+                await User.updateOne({ _id: decoded.id, refreshToken }, { $set: { refreshToken: null } });
+            } catch (error) { if (!isTokenError(error)) throw error; }
+        }
+        clearAuthCookies(res);
         res.json({
             success: true,
             message: "Logged out successfully",

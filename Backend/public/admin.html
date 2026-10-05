@@ -9,11 +9,11 @@
 <p class="eyebrow">ADMIN PORTAL</p><h1 id="auth-title">Welcome back.</h1><p>Manage your products and inventory.</p>
 <div class="tabs"><button id="login-tab" class="secondary" type="button">Login</button><button id="register-tab" class="secondary" type="button">Create account</button></div>
 <form id="auth-form">
-<label class="registration" hidden>Full name<input name="name" autocomplete="name"></label>
-<label>Username<input name="username" autocomplete="username" required></label>
-<label>Password<input name="password" type="password" minlength="6" autocomplete="current-password" required></label>
-<label class="registration" hidden>Phone number<input name="phoneNumber" type="tel" autocomplete="tel"></label>
-<p>New accounts need the store owner's approval before accessing the admin dashboard.</p>
+<label class="registration" hidden>Full name<input name="name" autocomplete="name" maxlength="100"></label>
+<label>Username<input name="username" autocomplete="username" maxlength="100" autocapitalize="none" spellcheck="false" required></label>
+<label>Password<input name="password" type="password" minlength="6" autocomplete="current-password" aria-describedby="password-help" required><small id="password-help">Use at least 6 characters (maximum 72 bytes).</small></label>
+<label class="registration" hidden>Phone number<input name="phoneNumber" type="tel" autocomplete="tel" maxlength="25"></label>
+<aside class="approval-note"><strong>Admin access needs approval</strong><p>Create your account without a registration key. Then ask the store owner to approve your username before logging in.</p></aside>
 <button id="auth-submit" type="submit">Login to dashboard</button>
 </form></section>
 <section id="dashboard" hidden>

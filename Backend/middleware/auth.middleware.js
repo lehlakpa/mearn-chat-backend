@@ -1,18 +1,18 @@
 import { verifyAccessToken, isTokenError } from "../utils/token.js";
 import User from "../models/user.model.js";
+import { readCookie } from "../utils/auth-cookies.js";
 
 const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const bearer = typeof authHeader === "string" && /^Bearer\s+(\S+)$/i.exec(authHeader);
 
-    if (!bearer) {
+    const token = readCookie(req, "accessToken") || (bearer && bearer[1]);
+    if (!token) {
         return res.status(401).json({
             success: false,
             message: "Access token missing or invalid",
         });
     }
-
-    const token = bearer[1];
 
     try {
         const decoded = verifyAccessToken(token);

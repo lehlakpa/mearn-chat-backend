@@ -29,19 +29,19 @@ All paths below are relative to the API origin.
 | Method | Path | Access | Success response |
 | --- | --- | --- | --- |
 | POST | `/api/auth/register` | Public | `201 { success, message, user }` |
-| POST | `/api/auth/login` | Admin credentials | `{ success, message, accessToken, refreshToken, user }` |
-| POST | `/api/auth/refresh-token` | Refresh token | `{ success, message, accessToken }` |
-| POST | `/api/auth/logout` | Admin bearer token | `{ success, message }` |
-| GET | `/api/admin/me` | Admin bearer token | `{ success, user: { id, username } }` |
+| POST | `/api/auth/login` | Admin credentials | `{ success, message, user }` |
+| POST | `/api/auth/refresh-token` | Refresh token | `{ success, message }` |
+| POST | `/api/auth/logout` | Admin access cookie | `{ success, message }` |
+| GET | `/api/admin/me` | Admin access cookie | `{ success, user: { id, username } }` |
 | GET | `/api/products` | Public | `{ success, count, products }` |
 | GET | `/api/products?category=Home` | Public | `{ success, count, products }` |
 | GET | `/api/products/:id` | Public | `{ success, product }` |
-| GET | `/api/products/low-stock` | Admin bearer token | `{ success, count, products }` |
-| POST | `/api/products` | Admin bearer token | `201 { success, message, product }` |
-| PUT | `/api/products/:id` | Admin bearer token | `{ success, message, product }` |
-| DELETE | `/api/products/:id` | Admin bearer token | `{ success, message }` |
+| GET | `/api/products/low-stock` | Admin access cookie | `{ success, count, products }` |
+| POST | `/api/products` | Admin access cookie | `201 { success, message, product }` |
+| PUT | `/api/products/:id` | Admin access cookie | `{ success, message, product }` |
+| DELETE | `/api/products/:id` | Admin access cookie | `{ success, message }` |
 
-Protected calls use `Authorization: Bearer <accessToken>`.
+Browser calls use `credentials: "include"`. Login sets HTTP-only `accessToken` and `refreshToken` cookies; tokens are never returned in JSON or stored in browser storage. Bearer access headers remain supported for existing API clients.
 
 ## Authentication request bodies
 
@@ -70,13 +70,11 @@ Login:
 
 Login returns `user: { id, name, username, phoneNumber }`. Registration also includes `createdAt`. Neither response includes a `role` property; use `/api/admin/me` to check access instead of expecting `user.role`.
 
-Refresh:
+Refresh and logout use POST with no request body and `credentials: "include"`. The server reads the refresh cookie automatically. `/api/auth/refresh` is an alias for `/api/auth/refresh-token`.
 
-```json
-{ "refreshToken": "stored-refresh-token" }
-```
+Access tokens expire after 15 minutes; refresh tokens expire after 7 days (configurable through the token expiry environment variables). Cookie lifetimes follow JWT expiry. On `401`, refresh once and retry the original request once. If refresh fails, return to login. Treat `403` as access denied. Logout revokes the stored refresh token and clears both cookies, even after access expiry. A copied access token remains valid until expiry.
 
-Access tokens expire after 15 minutes; refresh tokens expire after 7 days. On `401`, refresh once, save the new access token, and retry the original request once. If refresh fails, clear the local session and redirect to login. Do not retry refresh indefinitely. Treat `403` as access denied. Logout needs the bearer header and no body; clear local tokens after logout. Current logout invalidates refresh tokens; an already-issued access token can remain valid until its expiry.
+Cookies use `HttpOnly`, `SameSite=Strict`, and `Secure` in production. Serve production over HTTPS. The bundled UI works on the same origin automatically. For a separate same-site frontend (for example localhost on another port), add its exact origin to `CORS_ORIGINS` and use `credentials: "include"` on every authentication/API request. Untrusted origins cannot make state-changing requests. Cross-site frontend hosting is not supported by this Strict-cookie configuration. Existing browser-storage sessions must log in again.
 
 ## Product fields
 
@@ -106,7 +104,7 @@ const response = await fetch(
   `${API_BASE}/api/products${editingId ? `/${encodeURIComponent(editingId)}` : ""}`,
   {
     method: editingId ? "PUT" : "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
+    credentials: "include",
     body: form,
   },
 );

@@ -96,10 +96,12 @@ test("approved admins can login and refresh", async () => {
     const response = await request("/api/auth/login", "POST", { username: "owner", password: "secret123" });
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.ok(data.accessToken);
-    assert.equal(user.refreshToken, data.refreshToken);
+    assert.equal(data.accessToken, undefined);
+    assert.equal(data.refreshToken, undefined);
+    const cookie = response.headers.getSetCookie().find(value => value.startsWith("refreshToken=")).split(";")[0];
+    assert.equal(user.refreshToken, cookie.slice("refreshToken=".length));
     mock.method(User, "findById", () => ({ select: async () => user }));
-    assert.equal((await request("/api/auth/refresh-token", "POST", { refreshToken: data.refreshToken })).status, 200);
+    assert.equal((await fetch(base + "/api/auth/refresh-token", { method: "POST", headers: { Cookie: cookie } })).status, 200);
 });
 
 test("customer accounts cannot login or refresh into an admin session", async () => {
@@ -108,7 +110,7 @@ test("customer accounts cannot login or refresh into an admin session", async ()
     assert.equal((await request("/api/auth/login", "POST", { username: "owner", password: "secret123" })).status, 403);
     const refreshToken = generateRefreshToken(admin);
     mock.method(User, "findById", () => ({ select: async () => ({ ...admin, role: "customer", refreshToken }) }));
-    assert.equal((await request("/api/auth/refresh-token", "POST", { refreshToken })).status, 401);
+    assert.equal((await fetch(base + "/api/auth/refresh-token", { method: "POST", headers: { Cookie: `refreshToken=${refreshToken}` } })).status, 401);
 });
 test("inventory validation rejects negative, fractional and nonnumeric stock; permits zero price", () => {
     for (const stock of [-1, 1.5, "bad", "", null, true]) assert.throws(() => productFields({ stock }, true));
