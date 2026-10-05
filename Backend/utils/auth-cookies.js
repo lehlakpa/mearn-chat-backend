@@ -1,17 +1,42 @@
 import jwt from "jsonwebtoken";
 
-const options = path => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path });
+function cookieOptions(path) {
+    return {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path,
+    };
+}
+
 export function readCookie(req, name) {
-    const entry = (req.headers.cookie || "").split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`));
-    if (!entry) return undefined;
-    try { return decodeURIComponent(entry.slice(name.length + 1)); } catch { return undefined; }
-}
-export function setAuthCookies(res, accessToken, refreshToken) {
-    for (const [name, token, path] of [["accessToken", accessToken, "/api"], ["refreshToken", refreshToken, "/api/auth"]]) {
-        if (token) res.cookie(name, token, { ...options(path), maxAge: Math.max(0, jwt.decode(token).exp * 1000 - Date.now()) });
+    const cookies = (req.headers.cookie || "").split(";");
+    for (const cookie of cookies) {
+        const value = cookie.trim();
+        if (!value.startsWith(`${name}=`)) continue;
+        try {
+            return decodeURIComponent(value.slice(name.length + 1));
+        } catch {
+            return undefined;
+        }
     }
+    return undefined;
 }
+
+function setTokenCookie(res, name, token, path) {
+    const expiresAt = jwt.decode(token).exp * 1000;
+    res.cookie(name, token, {
+        ...cookieOptions(path),
+        maxAge: Math.max(0, expiresAt - Date.now()),
+    });
+}
+
+export function setAuthCookies(res, accessToken, refreshToken) {
+    if (accessToken) setTokenCookie(res, "accessToken", accessToken, "/api");
+    if (refreshToken) setTokenCookie(res, "refreshToken", refreshToken, "/api/auth");
+}
+
 export function clearAuthCookies(res) {
-    res.clearCookie("accessToken", options("/api"));
-    res.clearCookie("refreshToken", options("/api/auth"));
+    res.clearCookie("accessToken", cookieOptions("/api"));
+    res.clearCookie("refreshToken", cookieOptions("/api/auth"));
 }

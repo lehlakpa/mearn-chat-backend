@@ -1,34 +1,9 @@
 import Product from "../models/Products.js";
-import cloudinary from "../config/cloudinary.js";
-import streamifier from "streamifier";
+import { productFields } from "../utils/product-fields.js";
+import { uploadImage, removeImage } from "../utils/product-images.js";
 
-export function productFields(body, partial = false) {
-    const fields = {};
-    for (const key of ["title", "description", "category"]) {
-        if (body[key] === undefined && (partial || key === "category")) continue;
-        if (typeof body[key] !== "string" || !body[key].trim()) throw new Error(`${key} is required`);
-        fields[key] = body[key].trim();
-    }
-    for (const key of ["price", "stock", "lowStockThreshold"]) {
-        if (body[key] === undefined && (partial || key !== "price")) continue;
-        const raw = body[key];
-        const value = Number(raw);
-        if (!["number", "string"].includes(typeof raw) || String(raw).trim() === "" || !Number.isFinite(value) || value < 0 || (key !== "price" && !Number.isSafeInteger(value))) {
-            throw new Error(`${key} must be a non-negative ${key === "price" ? "number" : "whole number"}`);
-        }
-        fields[key] = value;
-    }
-    return fields;
-}
-const uploadImage = buffer => new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream({ folder: "products" }, (error, result) => error ? reject(error) : resolve(result));
-    streamifier.createReadStream(buffer).pipe(stream);
-});
-const removeImage = async id => {
-    if (!id) return;
-    try { await cloudinary.uploader.destroy(id); }
-    catch (error) { console.error("Image cleanup failed:", error.message); }
-};
+export { productFields } from "../utils/product-fields.js";
+
 const fail = (res, error) => {
     const invalid = ["ValidationError", "CastError"].includes(error.name);
     if (!invalid) console.error("Product operation failed:", error.message);

@@ -26,11 +26,16 @@ export const verifyAccessToken = (token) => verifyToken(token, process.env.ACCES
 export const verifyRefreshToken = (token) => verifyToken(token, process.env.REFRESH_TOKEN_SECRET, "refresh");
 
 function verifyToken(token, secret, tokenType) {
-    const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] });
-    if (decoded.tokenType !== tokenType || typeof decoded.id !== "string" || !/^[a-f\d]{24}$/i.test(decoded.id) || !Number.isFinite(decoded.exp)) {
-        throw new jwt.JsonWebTokenError("Invalid token payload");
+    try {
+        const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] });
+        if (decoded.tokenType !== tokenType || typeof decoded.id !== "string" || !/^[a-f\d]{24}$/i.test(decoded.id) || !Number.isFinite(decoded.exp)) {
+            throw new jwt.JsonWebTokenError("Invalid token payload");
+        }
+        return decoded;
+    } catch (error) {
+        error.tokenType = tokenType;
+        throw error;
     }
-    return decoded;
 }
 
 export const isTokenError = (error) => error instanceof jwt.JsonWebTokenError;
