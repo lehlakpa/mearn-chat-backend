@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { fileURLToPath } from "node:url";
 import authRoutes from "./routes/auth.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import orderRoutes from "./routes/order.routes.js";
@@ -30,13 +29,6 @@ app.get("/api/admin/me", authMiddleware, (req, res) => {
 });
 app.get("/api/health", (req, res) => {
     res.json({ success: true, message: "Server is running" });
-});
-
-// Bundled frontend.
-const publicDir = fileURLToPath(new URL("./public/", import.meta.url));
-app.use(express.static(publicDir));
-app.get(["/admin", "/admin/login", "/admin/register"], (req, res) => {
-    res.sendFile("admin.html", { root: publicDir });
 });
 
 app.use(notFound);

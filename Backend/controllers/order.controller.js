@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
 import { createHash } from "node:crypto";
 import Product from "../models/Products.js";
-import Order from "../models/Order.js";
+import Order, { ORDER_STATUSES } from "../models/Order.js";
 import { orderFields } from "../utils/order-fields.js";
 import { ApiError } from "../utils/ApiError.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 export { orderFields } from "../utils/order-fields.js";
 
@@ -66,3 +67,27 @@ export const getOrders = async (req, res) => {
         res.status(500).json({ success: false, message: "Unable to load orders" });
     }
 };
+
+export const updateOrderStatus = asyncHandler(async (req, res) => {
+    if (!mongoose.isObjectIdOrHexString(req.params.id)) throw new ApiError(400, "A valid order ID is required");
+    const status = req.body?.status;
+    if (!ORDER_STATUSES.includes(status)) throw new ApiError(400, `Status must be one of: ${ORDER_STATUSES.join(", ")}`);
+
+    const transitions = { pending: ["confirmed", "cancelled"], confirmed: ["delivered", "cancelled"], cancelled: [], delivered: [] };
+    const order = await mongoose.connection.transaction(async session => {
+        const current = await Order.findById(req.params.id).session(session);
+        if (!current) throw new ApiError(404, "Order not found");
+        // Retrying a successful update must not restore stock twice.
+        if (current.status === status) return current;
+        if (!transitions[current.status]?.includes(status)) throw new ApiError(409, `Cannot change order status from ${current.status} to ${status}`);
+        current.status = status;
+        // Older orders may predate required contact fields; validate this change only.
+        await current.save({ session, validateModifiedOnly: true });
+        if (status === "cancelled") {
+            // A deleted product has no inventory to restore; do not recreate it.
+            await Product.updateOne({ _id: current.product }, { $inc: { stock: current.quantity } }, { session });
+        }
+        return current;
+    });
+    res.json({ success: true, message: "Order status updated", order: receipt(order) });
+});

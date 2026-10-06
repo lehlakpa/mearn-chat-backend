@@ -20,7 +20,7 @@ These are routes to implement in the frontend router, not additional backend API
 
 Customers do not need login or registration. Do not put an auth guard around the customer routes. Validate admin sessions through `GET /api/admin/me`; the presence of a stored token alone is not authorization. The backend checks admin permissions on every protected request.
 
-The bundled backend UI currently serves `/`, `/admin`, `/admin/login`, and `/admin/register`; its product details and editor use dialogs. The additional page paths above are for a separate frontend implementation. Configure that frontend host to serve its app on direct navigation to client routes.
+This backend serves APIs only. All page routes above belong to a separately hosted frontend; `/`, `/admin`, and other frontend paths return JSON 404 responses on the backend. Configure the frontend host to serve its app on direct navigation to client routes.
 
 ## API routes
 
@@ -74,7 +74,7 @@ Refresh and logout use POST with no request body and `credentials: "include"`. T
 
 Access tokens expire after 15 minutes; refresh tokens expire after 7 days (configurable through the token expiry environment variables). Cookie lifetimes follow JWT expiry. On `401`, refresh once and retry the original request once. If refresh fails, return to login. Treat `403` as access denied. Logout revokes the stored refresh token and clears both cookies, even after access expiry. A copied access token remains valid until expiry.
 
-Cookies use `HttpOnly`, `SameSite=Strict`, and `Secure` in production. Serve production over HTTPS. The bundled UI works on the same origin automatically. For a separate same-site frontend (for example localhost on another port), add its exact origin to `CORS_ORIGINS` and use `credentials: "include"` on every authentication/API request. Untrusted origins cannot make state-changing requests. Cross-site frontend hosting is not supported by this Strict-cookie configuration. Existing browser-storage sessions must log in again.
+Cookies use `HttpOnly`, `SameSite=Strict`, and `Secure` in production. Serve production over HTTPS. For a separate same-site frontend (for example localhost on another port), add its exact origin to `CORS_ORIGINS` and use `credentials: "include"` on every authentication/API request. Untrusted origins cannot make state-changing requests. Cross-site frontend hosting is not supported by this Strict-cookie configuration. Existing browser-storage sessions must log in again.
 
 ## Product fields
 
@@ -139,11 +139,11 @@ Low-stock results include out-of-stock products and products exactly at their li
 - Handle `400` for invalid input/upload/ID, `401` for invalid sessions, `403` for denied admin access, `404` for missing products, and `500` for server failures. Invalid login credentials currently return `400`.
 - Render product text through normal framework text bindings, not raw HTML.
 - Validate file type/size and stock inputs before submitting, while retaining backend validation.
-- Single-product orders are supported as described below. Cart, online payment, cancellation and fulfillment status updates are not implemented.
+- Single-product orders are supported as described below. Admins can update order status as described below. Cart and online payment are not implemented.
 
 ## Customer order form
 
-The bundled customer page includes **View details → Order now**. For a separate frontend, implement the form in a dialog or a `/products/:id/order` page. No customer login is required.
+In your frontend, implement the form in a dialog or a `/products/:id/order` page. No customer login is required.
 
 `POST /api/orders` is public and accepts JSON:
 
@@ -162,7 +162,7 @@ The bundled customer page includes **View details → Order now**. For a separat
 
 Generate `requestId` using `crypto.randomUUID()` once for each new order. Reuse the same ID and unchanged request body when retrying a failed or interrupted submission. Do not generate a new ID on every retry. The backend deduplicates by this ID; reusing it with different order details returns `409`. Production frontend pages should be served over HTTPS for `crypto.randomUUID()` (localhost also works).
 
-Required fields: `productId`, integer `quantity` (1–10000), `address` (max 500 characters), and UUID v4 `requestId`. `customerName` (max 100 characters), `phoneNumber` (max 25 characters), `email` (max 254 characters), and `notes` (max 1000 characters) are optional and may be omitted or blank. If supplied, the phone must have 7–15 digits (spaces, +, parentheses and hyphens allowed), and email must be a valid email address. The admin order list includes the optional contact details; public receipts do not expose them.
+Required fields: `productId`, integer `quantity` (1?10000), full name `customerName` (max 100 characters), contact number `phoneNumber` (max 25 characters), delivery location/address `address` (max 500 characters), and UUID v4 `requestId`. Full name, contact number, and address must be nonblank text; missing, null, empty, or whitespace-only values return HTTP 400. The phone must have 7?15 digits (spaces, +, parentheses and hyphens allowed). `email` (max 254 characters) and `notes` (max 1000 characters) remain optional and may be omitted or blank; a supplied email must be valid. Mark full name, contact number, and location/address as required in your frontend order form. The admin order list includes contact details; public receipts do not expose them.
 
 Prices are read from the product on the server. Client-supplied price, total, payment or status fields are not used. Payment is Cash on Delivery and initial status is `pending`. Stock is deducted when the order is accepted. Order creation and stock reservation run in one MongoDB transaction, so a failed save rolls back the reservation; the stock condition prevents overselling.
 
@@ -186,9 +186,28 @@ Success (`201`, or `200` for a repeat submission) returns:
 
 Show the reference and product total after success, clear/hide the form, and refresh product availability. Disable repeat submission while saving. A `409` also indicates insufficient stock or an unavailable/deleted product; show the response message and refresh availability. On a network/`500` error retry the unchanged request with the same request ID. No online payment or automatic customer notification is sent.
 
-Admins can read orders via `GET /api/orders?page=1` with a bearer token. Response: `{ success, orders, page, hasMore }`, with up to 50 orders per page, newest first. Orders contain `_id`, customer contact/address/notes, product snapshot, quantity, unit price, total, payment method, status and timestamps. Customer data is not publicly readable. The bundled admin dashboard has an Incoming orders table with refresh and pagination.
+Admins can read orders via `GET /api/orders?page=1` with a bearer token. Response: `{ success, orders, page, hasMore }`, with up to 50 orders per page, newest first. Orders contain `_id`, customer contact/address/notes, product snapshot, quantity, unit price, total, payment method, status and timestamps. Customer data is not publicly readable. A separate admin frontend can display these results in an orders table with refresh and pagination.
 
 MongoDB must support transactions (Atlas, a replica set, or a sharded cluster). A standalone MongoDB server is insufficient. Startup initializes the Order model and its unique request-ID index before accepting requests. No additional environment variables are needed for orders.
+
+## Order status updates
+
+Admin-only: `PATCH /api/orders/:id/status`, using an admin session cookie (`credentials: "include"`) or bearer access token.
+
+```json
+{ "status": "confirmed" }
+```
+
+Allowed values: `pending`, `cancelled`, `confirmed`, `delivered`. Use `confirmed`, not `conformed`. New orders always start as `pending`; public order creation cannot override status.
+
+- `pending` may change to `confirmed` or `cancelled`.
+- `confirmed` may change to `delivered` or `cancelled`.
+- `cancelled` and `delivered` are final.
+- Repeating the current status succeeds without modifying inventory.
+
+Cancellation restores the order quantity to the product stock in the same MongoDB transaction as the status change. Concurrent updates use transaction conflict handling; repeated cancellation does not restore stock twice. If the product was deleted, cancellation still succeeds without recreating the product. Confirmation and delivery do not deduct stock again.
+
+Success returns `{ success: true, message: "Order status updated", order }`; `order` uses the public receipt fields shown above, including the updated status. Extra body fields cannot change other order details. Errors: `400` for invalid ID/status, `401`/`403` for missing or unauthorized admin access, `404` for a missing order, and `409` for a disallowed transition. Refresh the admin order list after success.
 
 ## Security update
 

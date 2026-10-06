@@ -31,13 +31,12 @@ const request = (path, method = "GET", body, token) => fetch(base + path, {
     headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
 });
-test("customer and admin pages are served without exposing private keys", async () => {
-    for (const path of ["/", "/admin", "/admin/login", "/admin/register"]) {
+test("removed frontend pages and assets return JSON 404 responses", async () => {
+    for (const path of ["/", "/admin", "/admin/login", "/admin/register", "/index.html", "/admin.html", "/admin.js", "/store.js", "/shared.js", "/styles.css"]) {
         const response = await request(path);
-        assert.equal(response.status, 200);
-        const html = await response.text();
-        assert.match(html, /<!doctype html>/);
-        assert.ok(!html.includes(process.env.ADMIN_REGISTRATION_KEY));
+        assert.equal(response.status, 404, path);
+        assert.match(response.headers.get("content-type"), /application\/json/);
+        assert.deepEqual(await response.json(), { success: false, message: "Not found" });
     }
 });
 test("public product listing and details require no account", async () => {
@@ -167,7 +166,22 @@ test("order validation rejects missing address, invalid contact values, IDs and 
     }
     assert.equal((await request("/api/orders", "POST", orderBody({ quantity: 0 }))).status, 400);
 });
-test("orders accept omitted or blank contact details and persist an optional email", async () => {
+test("orders require full name, contact number and delivery address", async () => {
+    for (const [key, label] of [["customerName", "Full name"], ["phoneNumber", "Contact number"], ["address", "Delivery address"]]) {
+        for (const value of [undefined, null, "", "   "]) {
+            assert.throws(() => orderFields(orderBody({ [key]: value })), { statusCode: 400, message: `${label} is required` });
+            await assert.rejects(new Order(orderBody({ [key]: value })).validate(), error => {
+                assert.equal(error.errors[key].kind, "required");
+                return true;
+            });
+        }
+        const response = await request("/api/orders", "POST", orderBody({ [key]: " " }));
+        assert.equal(response.status, 400);
+        assert.equal((await response.json()).message, `${label} is required`);
+    }
+});
+
+test("orders trim required contact details and persist an optional email", async () => {
     mockOrderStore();
     mock.method(Product, "findOneAndUpdate", async () => ({ _id: id, title: "Cup", price: 150 }));
     let saved;
@@ -178,14 +192,15 @@ test("orders accept omitted or blank contact details and persist an optional ema
         return [order];
     });
     for (const overrides of [
-        { customerName: undefined, phoneNumber: undefined, email: undefined },
-        { customerName: " ", phoneNumber: " ", email: " " },
-        { customerName: undefined, phoneNumber: undefined, email: " customer@example.com " },
+        { email: undefined },
+        { email: " " },
+        { email: " customer@example.com " },
     ]) {
-        const response = await request("/api/orders", "POST", orderBody(overrides));
+        const response = await request("/api/orders", "POST", orderBody({ customerName: " Customer Name ", phoneNumber: " 9800000000 ", address: " Kathmandu, Nepal ", ...overrides }));
         assert.equal(response.status, 201);
-        assert.equal(saved.customerName, "");
-        assert.equal(saved.phoneNumber, "");
+        assert.equal(saved.customerName, "Customer Name");
+        assert.equal(saved.phoneNumber, "9800000000");
+        assert.equal(saved.address, "Kathmandu, Nepal");
         assert.equal(saved.email, overrides.email?.trim() || "");
         assert.equal((await response.json()).order.email, undefined);
     }
@@ -266,4 +281,86 @@ test("only admins can read customer orders, with bounded pagination", async () =
     assert.equal(skip, 50);
     assert.equal(limit, 51);
     assert.equal((await request("/api/orders?page=-1", "GET", null, token)).status, 400);
+});
+
+function mockStatusStore(status = "pending") {
+    const session = { statusTransaction: true };
+    const order = { _id: id, product: id, quantity: 2, status, async save(options) { assert.equal(options.session, session); } };
+    mock.method(mongoose.connection, "transaction", async callback => callback(session));
+    mock.method(Order, "findById", orderId => {
+        assert.equal(orderId, id);
+        return { session: async value => { assert.equal(value, session); return order; } };
+    });
+    const restore = mock.method(Product, "updateOne", async (filter, update, options) => {
+        assert.deepEqual(filter, { _id: id });
+        assert.deepEqual(update, { $inc: { stock: 2 } });
+        assert.equal(options.session, session);
+        return { matchedCount: 1 };
+    });
+    return { order, restore, session };
+}
+
+test("only admins can change order status", async () => {
+    const path = `/api/orders/${id}/status`;
+    assert.equal((await request(path, "PATCH", { status: "confirmed" })).status, 401);
+    mock.method(User, "findById", async () => ({ ...admin, role: "customer" }));
+    assert.equal((await request(path, "PATCH", { status: "confirmed" }, generateAccessToken(admin))).status, 403);
+});
+
+test("status updates validate IDs and statuses and return 404 for missing orders", async () => {
+    mock.method(User, "findById", async () => admin);
+    const token = generateAccessToken(admin);
+    for (const status of [undefined, null, "conformed", "paid", {}, ""]) {
+        assert.equal((await request(`/api/orders/${id}/status`, "PATCH", { status }, token)).status, 400);
+    }
+    assert.equal((await request("/api/orders/bad/status", "PATCH", { status: "confirmed" }, token)).status, 400);
+    mock.method(mongoose.connection, "transaction", async callback => callback({}));
+    mock.method(Order, "findById", () => ({ session: async () => null }));
+    assert.equal((await request(`/api/orders/${id}/status`, "PATCH", { status: "confirmed" }, token)).status, 404);
+});
+
+test("admin confirms and delivers orders without altering stock or other fields", async () => {
+    mock.method(User, "findById", async () => admin);
+    const token = generateAccessToken(admin);
+    const { order, restore } = mockStatusStore();
+    for (const status of ["pending", "confirmed", "delivered", "delivered"]) {
+        const response = await request(`/api/orders/${id}/status`, "PATCH", { status, quantity: 999 }, token);
+        assert.equal(response.status, 200);
+        assert.equal((await response.json()).order.status, status);
+        assert.equal(order.quantity, 2);
+    }
+    for (const status of ["pending", "confirmed", "cancelled"]) {
+        assert.equal((await request(`/api/orders/${id}/status`, "PATCH", { status }, token)).status, 409);
+    }
+    assert.equal(restore.mock.callCount(), 0);
+});
+
+test("pending and confirmed orders can be cancelled with stock restored only once", async () => {
+    mock.method(User, "findById", async () => admin);
+    const token = generateAccessToken(admin);
+    const { order, restore } = mockStatusStore();
+    for (const initial of ["pending", "confirmed"]) {
+        order.status = initial;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            assert.equal((await request(`/api/orders/${id}/status`, "PATCH", { status: "cancelled" }, token)).status, 200);
+        }
+        for (const status of ["pending", "confirmed", "delivered"]) {
+            assert.equal((await request(`/api/orders/${id}/status`, "PATCH", { status }, token)).status, 409);
+        }
+    }
+    assert.equal(restore.mock.callCount(), 2);
+});
+
+test("failed stock restoration rolls back cancellation", async () => {
+    mock.method(User, "findById", async () => admin);
+    const { order, session } = mockStatusStore();
+    mock.method(mongoose.connection, "transaction", async callback => {
+        const initial = order.status;
+        try { return await callback(session); }
+        catch (error) { order.status = initial; throw error; }
+    });
+    mock.method(Product, "updateOne", async () => { throw new Error("Simulated inventory failure"); });
+    const response = await request(`/api/orders/${id}/status`, "PATCH", { status: "cancelled" }, generateAccessToken(admin));
+    assert.equal(response.status, 500);
+    assert.equal(order.status, "pending");
 });

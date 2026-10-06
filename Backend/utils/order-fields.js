@@ -8,10 +8,11 @@ export function orderFields(body = {}) {
     fields.productId = body.productId.toLowerCase();
     if (typeof body.quantity !== "number" || !Number.isSafeInteger(body.quantity) || body.quantity < 1 || body.quantity > 10000) throw new ApiError(400, "Quantity must be a whole number between 1 and 10000");
     fields.quantity = body.quantity;
+    const requiredFields = { customerName: "Full name", phoneNumber: "Contact number", address: "Delivery address" };
     for (const [key, max] of [["customerName", 100], ["phoneNumber", 25], ["address", 500], ["notes", 1000], ["email", 254]]) {
         const value = body[key] ?? "";
         if (typeof value !== "string" || value.trim().length > max) throw new ApiError(400, `${key} must be text of no more than ${max} characters`);
-        if (key === "address" && !value.trim()) throw new ApiError(400, "Delivery address is required");
+        if (requiredFields[key] && !value.trim()) throw new ApiError(400, `${requiredFields[key]} is required`);
         fields[key] = value.trim();
     }
     if (fields.phoneNumber && (!/^[+\d\s()-]+$/.test(fields.phoneNumber) || fields.phoneNumber.replace(/\D/g, "").length < 7 || fields.phoneNumber.replace(/\D/g, "").length > 15)) throw new ApiError(400, "Enter a valid phone number");
