@@ -25,7 +25,7 @@ Public product APIs require no account. Approved admins can authenticate to crea
 
 ## Deploy on Render
 
-Deploy this repository as a Node Web Service for the API. Host the frontend separately and configure it with the backend URL. For browser requests from another origin, configure `CORS_ORIGINS` and follow the cookie requirements below.
+Deploy this repository as a Node Web Service for the API. Host the frontend separately (for example, as another Render service) and set its API base URL to `https://<backend-service>.onrender.com`. The backend serves JSON under `/api` only; it does not serve the frontend. Set `CORS_ORIGINS` to the frontend's exact HTTPS origin (for example, `https://<frontend-service>.onrender.com`, without a path or trailing slash). Browser clients using the HTTP-only auth cookies must send requests with credentials enabled. The frontend and API must be same-site for the `SameSite=Strict` cookies to work.
 
 Create a Render Blueprint using the repository's `render.yaml`, or configure an existing Web Service with:
 
@@ -35,7 +35,7 @@ Create a Render Blueprint using the repository's `render.yaml`, or configure an 
 - Health Check Path: `/api/health`
 - Environment: `NODE_ENV=production`, `NODE_VERSION=22`
 
-Set `MONGO_URI`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in Render's environment settings. Use distinct random JWT secrets of at least 32 bytes. Never put these secrets in frontend files. Let Render supply `PORT`; the server binds to `0.0.0.0` using that value.
+Set `CORS_ORIGINS` to the exact deployed frontend origin (for example, `https://your-store.onrender.com`, with no path or trailing slash), plus `MONGO_URI`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in Render's environment settings. Use distinct random JWT secrets of at least 32 bytes. Never put these secrets in frontend files. Let Render supply `PORT`; the server binds to `0.0.0.0` using that value. Configure the frontend's own public API URL to the backend service URL; do not point the frontend at `localhost` in production.
 
 After deployment, open `/api/health` on the assigned Render URL to check the service. Frontend pages are not served by this backend. Updating `render.yaml` does not automatically reconfigure a manually created service; apply the settings above in its dashboard.
 

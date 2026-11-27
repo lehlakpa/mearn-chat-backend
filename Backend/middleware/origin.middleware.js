@@ -12,7 +12,7 @@ export const corsOptions = {
         callback(null, Boolean(origin) && allowedOrigins().includes(origin));
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
 };
 

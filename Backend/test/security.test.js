@@ -49,6 +49,28 @@ test("oversized request bodies return a bounded JSON error", async () => {
     assert.equal((await response.json()).success, false);
 });
 
+test("CORS preflight permits authenticated order-status PATCH requests", async () => {
+    const previous = process.env.CORS_ORIGINS;
+    process.env.CORS_ORIGINS = "https://store.example";
+    try {
+        const response = await fetch(base + "/api/orders/507f1f77bcf86cd799439011/status", {
+            method: "OPTIONS",
+            headers: {
+                Origin: "https://store.example",
+                "Access-Control-Request-Method": "PATCH",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        });
+        assert.equal(response.status, 204);
+        assert.equal(response.headers.get("access-control-allow-origin"), "https://store.example");
+        assert.match(response.headers.get("access-control-allow-methods"), /\bPATCH\b/);
+        assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+    } finally {
+        if (previous === undefined) delete process.env.CORS_ORIGINS;
+        else process.env.CORS_ORIGINS = previous;
+    }
+});
+
 test("login brute force and spoofed forwarding headers hit the same rate limit", async () => {
     for (let i = 0; i < 31; i++) {
         const response = await fetch(base + "/api/auth/login", {
